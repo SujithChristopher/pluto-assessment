@@ -33,7 +33,7 @@ from datetime import datetime as dt
 #     QInputDialog
 # )
 # from PySide6 import QtCore, QtGui, QtWidgets
-from PySide6.QtCore import QAbstractTableModel, Qt, QVariant
+from PySide6.QtCore import QAbstractTableModel, Qt
 
 # import plutofullassessdef as passdef
 
@@ -1081,12 +1081,12 @@ class DataFrameModel(QAbstractTableModel):
 
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
-            return QVariant()
+            return None
 
         if role == Qt.DisplayRole:
             value = self._df.iloc[index.row(), index.column()]
             return str(value)
-        return QVariant()
+        return None
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if role == Qt.DisplayRole:
@@ -1100,4 +1100,4 @@ class DataFrameModel(QAbstractTableModel):
             font.setBold(True)
             return font
 
-        return QVariant()
+        return None
