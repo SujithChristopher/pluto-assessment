@@ -799,7 +799,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         _pgobj.addItem(self.ui.strtZoneFill)
 
         # Angle display sign for the limb.
-        self._dispsign = 1.0 if self.data.limb.upper() == "RIGHT" else -1.0
+        self._dispsign = 1.0
 
         # AROM lines when appropriate.
         if self.data.arom is not None:

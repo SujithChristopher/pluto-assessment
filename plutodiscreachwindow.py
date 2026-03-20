@@ -912,7 +912,7 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
     def _romassess_add_graph(self):
         """Function to add graph and other objects for displaying HOC movements."""
         # Angle display sign for the limb.
-        self._dispsign = 1.0 if self.data.limb.upper() == "RIGHT" else -1.0
+        self._dispsign = 1.0
 
         _pgobj = pg.PlotWidget()
         _templayout = QtWidgets.QGridLayout()

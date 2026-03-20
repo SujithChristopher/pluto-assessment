@@ -736,6 +736,7 @@ class PlutoForceControlWindow(QtWidgets.QMainWindow):
         _templayout.addWidget(_pgobj)
         _pen = pg.mkPen(color=(255, 0, 0))
         self.ui.hocGraph.setLayout(_templayout)
+        self._dispsign = 1.0
         if self.data.mechanism == "HOC":
             _pgobj.setXRange(-self.data.arom[1], self.data.arom[1])
         else:
