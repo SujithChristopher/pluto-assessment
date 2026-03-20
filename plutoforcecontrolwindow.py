@@ -11,12 +11,12 @@ import numpy as np
 
 from qtpluto import QtPluto
 
-from PyQt5 import QtCore, QtWidgets, QtGui
-from PyQt5.QtCore import QTimer
-from PyQt5.QtGui import QColor
-from PyQt5.QtWidgets import QGraphicsRectItem
-from PyQt5.QtWidgets import QGraphicsEllipseItem
-from PyQt5.QtCore import pyqtSignal
+from PySide6 import QtCore, QtWidgets, QtGui
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QGraphicsRectItem
+from PySide6.QtWidgets import QGraphicsEllipseItem
+from PySide6.QtCore import Signal
 import pyqtgraph as pg
 from enum import Enum, auto
 
@@ -883,7 +883,7 @@ class PlutoForceControlWindow(QtWidgets.QMainWindow):
             _comment = CommentDialog(
                 label="Assisted PROM completed. Add optional comment.", optionyesno=True
             )
-            if _comment.exec_() == QtWidgets.QDialog.Accepted:
+            if _comment.exec() == QtWidgets.QDialog.Accepted:
                 data["status"] = pfadef.AssessStatus.COMPLETE.value
             else:
                 data["status"] = pfadef.AssessStatus.REJECTED.value
@@ -892,7 +892,7 @@ class PlutoForceControlWindow(QtWidgets.QMainWindow):
             _comment = CommentDialog(
                 label="Assisted PROM incomplete. Why?", optionyesno=False
             )
-            if _comment.exec_() == QtWidgets.QDialog.Rejected:
+            if _comment.exec() == QtWidgets.QDialog.Rejected:
                 data["taskcomment"] = _comment.getText()
                 data["status"] = pfadef.AssessStatus.TERMINATED.value
         if self.on_close_callback:
@@ -932,4 +932,4 @@ if __name__ == "__main__":
         heartbeat=True,
     )
     pcalib.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

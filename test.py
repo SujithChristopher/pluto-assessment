@@ -1,7 +1,7 @@
-from PyQt5.QtCore import QThread, pyqtSignal, QObject
+from PySide6.QtCore import QThread, Signal, QObject
 
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
     QPushButton,
@@ -9,12 +9,12 @@ from PyQt5.QtWidgets import (
     QWidget,
     QLabel,
 )
-from PyQt5.QtCore import QThread, pyqtSignal, QObject
+from PySide6.QtCore import QThread, Signal, QObject
 
 
 class Worker(QObject):
-    finished = pyqtSignal()
-    progress = pyqtSignal(int)
+    finished = Signal()
+    progress = Signal(int)
 
     def __init__(self):
         super().__init__()
@@ -72,4 +72,4 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

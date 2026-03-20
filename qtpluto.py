@@ -7,7 +7,7 @@ Date: 24 July 2024
 Email: siva82kb@gmail.com
 """
 
-from PyQt5.QtCore import QObject, pyqtSignal
+from PySide6.QtCore import QObject, Signal
 from qtjedi import JediComm
 from collections import deque
 from datetime import datetime
@@ -25,9 +25,9 @@ class QtPluto(QObject):
     Class to handle PLUTO IO operations.
     """
 
-    newdata = pyqtSignal()
-    btnpressed = pyqtSignal()
-    btnreleased = pyqtSignal()
+    newdata = Signal()
+    btnpressed = Signal()
+    btnreleased = Signal()
 
     def __init__(self, port=None, baudrate=115200) -> None:
         super().__init__()
@@ -445,7 +445,7 @@ class QtPluto(QObject):
 
 if __name__ == "__main__":
     import sys
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
     from qtjedi import JediComm
 
     app = QApplication(sys.argv)
@@ -460,4 +460,4 @@ if __name__ == "__main__":
     pluto.get_version()
     pluto.send_heartbeat()
     pluto.start_sensorstream()
-    app.exec_()
+    app.exec()

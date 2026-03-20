@@ -13,8 +13,8 @@ import numpy as np
 
 from qtpluto import QtPluto
 
-from PyQt5 import QtCore, QtWidgets, QtGui
-from PyQt5.QtCore import pyqtSignal, QTimer, QThread
+from PySide6 import QtCore, QtWidgets, QtGui
+from PySide6.QtCore import Signal, QTimer, QThread
 import pyqtgraph as pg
 
 from enum import Enum, auto
@@ -805,7 +805,7 @@ class PlutoPropAssessWindow(QtWidgets.QMainWindow):
                 label="Proprioception completed. Add optional comment.",
                 optionyesno=True,
             )
-            if _comment.exec_() == QtWidgets.QDialog.Accepted:
+            if _comment.exec() == QtWidgets.QDialog.Accepted:
                 data["status"] = pfadef.AssessStatus.COMPLETE.value
             else:
                 data["status"] = pfadef.AssessStatus.REJECTED.value
@@ -814,7 +814,7 @@ class PlutoPropAssessWindow(QtWidgets.QMainWindow):
             _comment = CommentDialog(
                 label="Proprioception incomplete. Why?", optionyesno=False
             )
-            if _comment.exec_() == QtWidgets.QDialog.Rejected:
+            if _comment.exec() == QtWidgets.QDialog.Rejected:
                 data["taskcomment"] = _comment.getText()
                 data["status"] = pfadef.AssessStatus.TERMINATED.value
         if self.on_close_callback:
@@ -1053,4 +1053,4 @@ if __name__ == "__main__":
         onclosecb=lambda data: print(data),
     )
     pcalib.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

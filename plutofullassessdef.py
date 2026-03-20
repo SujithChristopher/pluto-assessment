@@ -12,7 +12,7 @@ import numpy as np
 from enum import Enum
 import misc
 
-from PyQt5.QtGui import QColor
+from PySide6.QtGui import QColor
 
 
 #

@@ -6,7 +6,7 @@ Date: 27 July 2024
 Email: siva82kb@gmail.com
 """
 
-from PyQt5.QtCore import QObject, pyqtSignal
+from PySide6.QtCore import QObject, Signal
 from enum import Enum
 
 import plutodefs as pdef

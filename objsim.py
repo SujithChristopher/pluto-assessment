@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 from qtjedi import JediComm
 
 from qtpluto import QtPluto
@@ -10,4 +10,4 @@ pluto.stop_sensorstream()
 pluto.get_version()
 pluto.send_heartbeat()
 pluto.start_sensorstream()
-app.exec_()
+app.exec()

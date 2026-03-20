@@ -1,4 +1,4 @@
-from PyQt5 import QtWidgets
+from PySide6 import QtWidgets
 import sys
 
 
@@ -28,4 +28,4 @@ class Controller:
 
 app = QtWidgets.QApplication(sys.argv)
 controller = Controller()
-sys.exit(app.exec_())
+sys.exit(app.exec())

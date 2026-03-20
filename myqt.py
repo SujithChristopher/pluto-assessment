@@ -1,11 +1,11 @@
-"""Module containing some of my custom PyQt5 widgets.
+"""Module containing some of my custom PySide6 widgets.
 
 Author: Sivakumar Balasubramanian
 Date: 08 June 2025
 """
 
-from PyQt5 import QtGui, QtCore
-from PyQt5.QtWidgets import (
+from PySide6 import QtGui, QtCore
+from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QVBoxLayout,
@@ -13,14 +13,12 @@ from PyQt5.QtWidgets import (
     QDialogButtonBox,
     QLabel,
     QMessageBox,
+    QGraphicsPathItem,
 )
-from PyQt5.QtWidgets import QGraphicsPathItem
-from PyQt5.QtGui import QPainterPath, QBrush, QColor
-from PyQt5.QtCore import QPointF
+from PySide6.QtGui import QPainterPath, QBrush, QColor, QFont
+from PySide6.QtCore import QPointF
 import pyqtgraph as pg
 import math
-
-from PyQt5.QtGui import QFont
 import sys
 
 
@@ -239,7 +237,7 @@ if __name__ == "__main__":
     dialog = CommentDialog(
         label="Reason for skipping Left limb HOC for 1234:", optionyesno=False
     )
-    if dialog.exec_() == QDialog.Accepted:
+    if dialog.exec() == QDialog.Accepted:
         print("Input:", dialog.getText())
     else:
         print("Cancelled")

@@ -14,13 +14,13 @@ import json
 from qtpluto import QtPluto
 from datetime import datetime as dt
 
-from PyQt5 import (
+from PySide6 import (
     QtWidgets,
 )
-from PyQt5.QtCore import (
+from PySide6.QtCore import (
     QTimer,
 )
-from PyQt5.QtWidgets import QMessageBox, QInputDialog
+from PySide6.QtWidgets import QMessageBox, QInputDialog
 
 import plutoassessdef as passdef
 
@@ -417,4 +417,4 @@ if __name__ == "__main__":
     mywin = PlutoPropAssesor("COM13")
     # ImageUpdate()
     mywin.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

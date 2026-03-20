@@ -20,14 +20,14 @@ from enum import Enum
 from qtpluto import QtPluto
 from datetime import datetime as dt
 
-from PyQt5 import (
+from PySide6 import (
     QtWidgets,
 )
-from PyQt5.QtCore import (
+from PySide6.QtCore import (
     QTimer,
 )
-from PyQt5.QtWidgets import QMessageBox, QInputDialog
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PySide6.QtWidgets import QMessageBox, QInputDialog
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from plutodataviewwindow import PlutoDataViewWindow
 from plutocalibwindow import PlutoCalibrationWindow
@@ -320,7 +320,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _comment = MechTaskSkipDialog(
             label=f"Sure you want to skip AROM? If so give the reason.",
         )
-        if _comment.exec_() == QtWidgets.QDialog.Accepted:
+        if _comment.exec() == QtWidgets.QDialog.Accepted:
             _skipcomment = _comment.getText()
             # Run the state machine.
             self._smachine.run_statemachine(
@@ -358,7 +358,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _comment = MechTaskSkipDialog(
             label=f"Sure you want to skip PROM? If so give the reason.",
         )
-        if _comment.exec_() == QtWidgets.QDialog.Accepted:
+        if _comment.exec() == QtWidgets.QDialog.Accepted:
             _skipcomment = _comment.getText()
             # Run the state machine.
             self._smachine.run_statemachine(
@@ -399,7 +399,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _comment = MechTaskSkipDialog(
             label=f"Sure you want to skip APROM Slow? If so give the reason.",
         )
-        if _comment.exec_() == QtWidgets.QDialog.Accepted:
+        if _comment.exec() == QtWidgets.QDialog.Accepted:
             _skipcomment = _comment.getText()
             # Run the state machine.
             self._smachine.run_statemachine(
@@ -440,7 +440,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _comment = MechTaskSkipDialog(
             label=f"Sure you want to skip APROM Fast? If so give the reason.",
         )
-        if _comment.exec_() == QtWidgets.QDialog.Accepted:
+        if _comment.exec() == QtWidgets.QDialog.Accepted:
             _skipcomment = _comment.getText()
             # Run the state machine.
             self._smachine.run_statemachine(
@@ -480,7 +480,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _comment = MechTaskSkipDialog(
             label=f"Sure you want to skip Position Hold? If so give the reason.",
         )
-        if _comment.exec_() == QtWidgets.QDialog.Accepted:
+        if _comment.exec() == QtWidgets.QDialog.Accepted:
             _skipcomment = _comment.getText()
             # Run the state machine.
             self._smachine.run_statemachine(
@@ -518,7 +518,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _comment = MechTaskSkipDialog(
             label=f"Sure you want to skip Discrete Reach? If so give the reason.",
         )
-        if _comment.exec_() == QtWidgets.QDialog.Accepted:
+        if _comment.exec() == QtWidgets.QDialog.Accepted:
             _skipcomment = _comment.getText()
             # Run the state machine.
             self._smachine.run_statemachine(
@@ -557,7 +557,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _comment = MechTaskSkipDialog(
             label=f"Sure you want to skip Proprioception? If so give the reason.",
         )
-        if _comment.exec_() == QtWidgets.QDialog.Accepted:
+        if _comment.exec() == QtWidgets.QDialog.Accepted:
             _skipcomment = _comment.getText()
             # Run the state machine.
             self._smachine.run_statemachine(
@@ -599,7 +599,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _comment = MechTaskSkipDialog(
             label=f"Sure you want to skip Force Control Low? If so give the reason.",
         )
-        if _comment.exec_() == QtWidgets.QDialog.Accepted:
+        if _comment.exec() == QtWidgets.QDialog.Accepted:
             _skipcomment = _comment.getText()
             # Run the state machine.
             self._smachine.run_statemachine(
@@ -641,7 +641,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _comment = MechTaskSkipDialog(
             label=f"Sure you want to skip Force Control Low? If so give the reason.",
         )
-        if _comment.exec_() == QtWidgets.QDialog.Accepted:
+        if _comment.exec() == QtWidgets.QDialog.Accepted:
             _skipcomment = _comment.getText()
             # Run the state machine.
             self._smachine.run_statemachine(
@@ -683,7 +683,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _comment = MechTaskSkipDialog(
             label=f"Sure you want to skip Force Control Low? If so give the reason.",
         )
-        if _comment.exec_() == QtWidgets.QDialog.Accepted:
+        if _comment.exec() == QtWidgets.QDialog.Accepted:
             _skipcomment = _comment.getText()
             # Run the state machine.
             self._smachine.run_statemachine(
@@ -755,7 +755,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _comment = MechTaskSkipDialog(
             label="Sure you want to skip? If so give the reason.",
         )
-        if _comment.exec_() == QtWidgets.QDialog.Accepted:
+        if _comment.exec() == QtWidgets.QDialog.Accepted:
             _skipcomment = _comment.getText()
             # Run the state machine.
             # Get the appropriate event.
@@ -1397,4 +1397,4 @@ if __name__ == "__main__":
     mywin = PlutoFullAssesor(pfadef.PLUTOCOMM)
     # ImageUpdate()
     mywin.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

@@ -11,7 +11,7 @@ import enum
 import sys
 import time
 from serial.tools.list_ports import comports
-from PyQt5.QtCore import pyqtSignal, pyqtSlot, QThread
+from PySide6.QtCore import Signal, Slot, QThread
 
 _INDEBUG = False
 _OUTDEBUG = False
@@ -27,7 +27,7 @@ class JediParsingStates(enum.Enum):
 
 
 class JediComm(QThread):
-    newdata_signal = pyqtSignal(list)
+    newdata_signal = Signal(list)
 
     def __init__(self, port=None, baudrate=115200) -> None:
         super().__init__()

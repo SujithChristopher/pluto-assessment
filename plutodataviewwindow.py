@@ -11,11 +11,11 @@ import numpy as np
 
 from qtpluto import QtPluto
 
-from PyQt5 import (
+from PySide6 import (
     QtWidgets,
 )
-from PyQt5.QtCore import QTimer
-from PyQt5.QtGui import QKeyEvent
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QKeyEvent
 from enum import Enum
 
 import plutodefs as pdef
@@ -188,4 +188,4 @@ if __name__ == "__main__":
     plutodev.set_limb("RIGHT")
     pdataview = PlutoDataViewWindow(plutodev=plutodev, mode="DIAGNOSTICS")
     pdataview.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

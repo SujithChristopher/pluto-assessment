@@ -11,11 +11,11 @@ import pandas as pd
 import os
 from datetime import datetime as dt
 
-from PyQt5 import (
+from PySide6 import (
     QtCore,
     QtWidgets,
 )
-from PyQt5.QtCore import QTimer
+from PySide6.QtCore import QTimer
 from enum import Enum
 
 from ui_subjectcreator import Ui_PlutoSubjectCreatorWindow
@@ -190,4 +190,4 @@ if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     screate = SubjectCreator(onclosecb=lambda data: print(data))
     screate.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

@@ -12,11 +12,11 @@ import numpy as np
 
 from qtpluto import QtPluto
 
-from PyQt5 import (
+from PySide6 import (
     QtCore,
     QtWidgets,
 )
-from PyQt5.QtCore import pyqtSignal
+from PySide6.QtCore import Signal
 import pyqtgraph as pg
 from enum import Enum
 
@@ -124,8 +124,8 @@ class PlutoRomAssessWindow(QtWidgets.QMainWindow):
     Class for handling the operation of the PLUTO ROM assessment window.
     """
 
-    aromset = pyqtSignal()
-    promset = pyqtSignal()
+    aromset = Signal()
+    promset = Signal()
 
     def __init__(
         self, parent=None, plutodev: QtPluto = None, mechanism: str = None, modal=False
@@ -325,4 +325,4 @@ if __name__ == "__main__":
     plutodev = QtPluto("COM4")
     pcalib = PlutoRomAssessWindow(plutodev=plutodev, mechanism="HOC")
     pcalib.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

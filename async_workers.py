@@ -6,7 +6,7 @@ Date: 2025
 Email: siva82kb@gmail.com
 """
 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 import traceback
 
 
@@ -14,10 +14,10 @@ class LimbSetupWorker(QThread):
     """Worker thread to handle blocking I/O operations for limb selection."""
 
     # Signals
-    started = pyqtSignal()  # Emitted when worker starts
-    finished = pyqtSignal()  # Emitted when I/O operations complete successfully
-    error = pyqtSignal(str)  # Emitted if an error occurs
-    progress = pyqtSignal(str)  # Emitted to provide progress updates
+    started = Signal()  # Emitted when worker starts
+    finished = Signal()  # Emitted when I/O operations complete successfully
+    error = Signal(str)  # Emitted if an error occurs
+    progress = Signal(str)  # Emitted to provide progress updates
 
     def __init__(self, data_obj, limb_text, parent=None):
         """

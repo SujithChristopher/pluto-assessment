@@ -11,11 +11,11 @@ import numpy as np
 
 from qtpluto import QtPluto
 
-from PyQt5 import (
+from PySide6 import (
     QtCore,
     QtWidgets,
 )
-from PyQt5.QtCore import QTimer
+from PySide6.QtCore import QTimer
 
 import plutodefs as pdef
 from plutodataviewwindow import PlutoDataViewWindow
@@ -368,4 +368,4 @@ if __name__ == "__main__":
         heartbeat=True,
     )
     pdataview.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

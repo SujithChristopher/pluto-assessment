@@ -12,11 +12,11 @@ from datetime import datetime as dt
 
 from qtpluto import QtPluto
 
-from PyQt5 import (
+from PySide6 import (
     QtCore,
     QtWidgets,
 )
-from PyQt5.QtCore import QTimer
+from PySide6.QtCore import QTimer
 from enum import Enum
 
 import plutodefs as pdef
@@ -387,4 +387,4 @@ if __name__ == "__main__":
         onclosecb=lambda data: print(dt.now()),
     )
     pcalib.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

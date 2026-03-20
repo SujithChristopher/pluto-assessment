@@ -23,15 +23,15 @@ import plutodefs as pdef
 import plutofullassessdef as pfadef
 from datetime import datetime as dt
 
-from PyQt5 import (
+from PySide6 import (
     QtWidgets,
 )
-from PyQt5.QtCore import (
+from PySide6.QtCore import (
     QTimer,
 )
-from PyQt5.QtWidgets import QMessageBox, QInputDialog
-from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtCore import QAbstractTableModel, Qt, QVariant
+from PySide6.QtWidgets import QMessageBox, QInputDialog
+from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6.QtCore import QAbstractTableModel, Qt, QVariant
 
 
 import plutofullassessdef as passdef
