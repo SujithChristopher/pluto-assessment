@@ -559,7 +559,7 @@ class PlutoPropAssessmentStateMachine:
         if self._ctrl_is_pos():
             return
         # Set up position controls
-        self._pluto.set_control_type("POSITIONLINEAR")
+        self._pluto.set_control_type("POSITIONAAN")
         self._pluto.set_control_bound(1.0)
         self._pluto.set_control_gain(2.0)
         self._act_demo_move()
@@ -571,24 +571,24 @@ class PlutoPropAssessmentStateMachine:
         )
         if self._tgt_set(_tgtdetails["target"]):
             return
-        self._pluto.set_control_target(**_tgtdetails)
+        self._pluto.set_aan_target(**_tgtdetails)
 
     def _act_ctrl_hold(self):
         if self._ctrl_hold():
             return
-        self._pluto.hold_control()
+        self._pluto.reset_aan_target()
 
     def _act_go_home(self):
         if self._ctrl_decay():
             return
-        self._pluto.decay_control()
+        self._pluto.set_control_type("NONE")
 
     def _act_assess_move(self):
         # Set the target.
         _tgtdetails = self._compute_target_details(self._data.prom[1], demomode=False)
         if self._tgt_set(_tgtdetails["target"]):
             return
-        self._pluto.set_control_target(**_tgtdetails)
+        self._pluto.set_aan_target(**_tgtdetails)
 
     def _act_do_nothing(self):
         pass
@@ -620,16 +620,16 @@ class PlutoPropAssessmentStateMachine:
             lambda: self._pluto.controltype == pdef.ControlTypes["NONE"]
         )
         self._ctrl_is_pos = (
-            lambda: self._pluto.controltype == pdef.ControlTypes["POSITIONLINEAR"]
+            lambda: self._pluto.controltype == pdef.ControlTypes["POSITIONAAN"]
         )
         self._tgt_set = lambda tgt: np.isclose(
             self._pluto.target, tgt, rtol=1e-03, atol=1e-03
         )
         self._ctrl_hold = (
-            lambda: self._pluto.controlhold == pdef.ControlHoldTypes["HOLD"]
+            lambda: self._pluto.controltype == pdef.ControlTypes["POSITIONAAN"]
         )
         self._ctrl_decay = (
-            lambda: self._pluto.controlhold == pdef.ControlHoldTypes["DECAY"]
+            lambda: self._pluto.controltype == pdef.ControlTypes["NONE"]
         )
         self.subj_in_target = (
             lambda: np.abs(self._data.current_target - self._pluto.hocdisp)
