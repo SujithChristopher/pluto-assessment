@@ -61,9 +61,11 @@ class Events(Enum):
     WFE_SET = auto()
     FPS_SET = auto()
     HOC_SET = auto()
+    WURD_SET = auto()
     WFE_SKIP = auto()
     FPS_SKIP = auto()
     HOC_SKIP = auto()
+    WURD_SKIP = auto()
     #
     # Calibration events
     #
@@ -149,11 +151,11 @@ class Events(Enum):
 
     @classmethod
     def mech_selected_events(cls):
-        return [Events.WFE_SET, Events.FPS_SET, Events.HOC_SET, Events.NOMECH_SET]
+        return [Events.WFE_SET, Events.FPS_SET, Events.HOC_SET, Events.WURD_SET, Events.NOMECH_SET]
 
     @classmethod
     def mech_skip_events(cls):
-        return [Events.WFE_SKIP, Events.FPS_SKIP, Events.HOC_SKIP]
+        return [Events.WFE_SKIP, Events.FPS_SKIP, Events.HOC_SKIP, Events.WURD_SKIP]
 
     @classmethod
     def task_selected_events(cls):
@@ -320,6 +322,7 @@ class PlutoFullAssessmentStateMachine:
                 Events.WFE_SKIP: "WFE",
                 Events.FPS_SKIP: "FPS",
                 Events.HOC_SKIP: "HOC",
+                Events.WURD_SKIP: "WURD",
             }
             # Set current mechanism.
             self._data.protocol.skip_mechanism(
@@ -334,6 +337,7 @@ class PlutoFullAssessmentStateMachine:
                 Events.WFE_SET: "WFE",
                 Events.FPS_SET: "FPS",
                 Events.HOC_SET: "HOC",
+                Events.WURD_SET: "WURD",
                 Events.NOMECH_SET: "",
             }
             if event == Events.NOMECH_SET:

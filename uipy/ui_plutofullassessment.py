@@ -167,6 +167,27 @@ class Ui_PlutoFullAssessor(object):
 
         self.verticalLayout_4.addLayout(self.horizontalLayout_16)
 
+        self.horizontalLayout_wurd = QHBoxLayout()
+        self.horizontalLayout_wurd.setSpacing(0)
+        self.horizontalLayout_wurd.setObjectName(u"horizontalLayout_wurd")
+        self.pbWURD = QPushButton(self.gbMechanisms)
+        self.pbWURD.setObjectName(u"pbWURD")
+        self.pbWURD.setEnabled(False)
+        self.pbWURD.setFont(font)
+        self.pbWURD.setStyleSheet(u"")
+
+        self.horizontalLayout_wurd.addWidget(self.pbWURD)
+
+        self.pbWURDSkip = QPushButton(self.gbMechanisms)
+        self.pbWURDSkip.setObjectName(u"pbWURDSkip")
+        self.pbWURDSkip.setEnabled(False)
+        self.pbWURDSkip.setMaximumSize(QSize(30, 16777215))
+
+        self.horizontalLayout_wurd.addWidget(self.pbWURDSkip)
+
+
+        self.verticalLayout_4.addLayout(self.horizontalLayout_wurd)
+
         self.horizontalLayout_15 = QHBoxLayout()
         self.horizontalLayout_15.setSpacing(0)
         self.horizontalLayout_15.setObjectName(u"horizontalLayout_15")
@@ -527,6 +548,8 @@ class Ui_PlutoFullAssessor(object):
         self.pbFPSSkip.setText(QCoreApplication.translate("PlutoFullAssessor", u"X", None))
         self.pbWFE.setText(QCoreApplication.translate("PlutoFullAssessor", u"Wrist Flexion/Extension", None))
         self.pbWFESkip.setText(QCoreApplication.translate("PlutoFullAssessor", u"X", None))
+        self.pbWURD.setText(QCoreApplication.translate("PlutoFullAssessor", u"Ulnar/Radial Deviation", None))
+        self.pbWURDSkip.setText(QCoreApplication.translate("PlutoFullAssessor", u"X", None))
         self.pbHOC.setText(QCoreApplication.translate("PlutoFullAssessor", u"Hand Opening/Closing", None))
         self.pbHOCSkip.setText(QCoreApplication.translate("PlutoFullAssessor", u"X", None))
         self.pbCalibrate.setText(QCoreApplication.translate("PlutoFullAssessor", u"Calibrate Mechanism", None))

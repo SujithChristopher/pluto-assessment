@@ -149,6 +149,8 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         # Mechanisms and skip
         self.pbWFE.clicked.connect(self._callback_wfe_assess)
         self.pbWFESkip.clicked.connect(self._callback_wfe_skip)
+        self.pbWURD.clicked.connect(self._callback_wurd_assess)
+        self.pbWURDSkip.clicked.connect(self._callback_wurd_skip)
         self.pbFPS.clicked.connect(self._callback_fps_assess)
         self.pbFPSSkip.clicked.connect(self._callback_fps_skip)
         self.pbHOC.clicked.connect(self._callback_hoc_assess)
@@ -745,6 +747,14 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self._callback_skip_mech_assess("WFE")
         self.update_ui()
 
+    def _callback_wurd_assess(self):
+        self._callback_start_mech_assess("WURD")
+        self.update_ui()
+
+    def _callback_wurd_skip(self):
+        self._callback_skip_mech_assess("WURD")
+        self.update_ui()
+
     def _callback_fps_skip(self):
         self._callback_skip_mech_assess("FPS")
         self.update_ui()
@@ -768,6 +778,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         # Get the appropriate event.
         _mechevent = {
             "WFE": Events.WFE_SET,
+            "WURD": Events.WURD_SET,
             "FPS": Events.FPS_SET,
             "HOC": Events.HOC_SET,
         }
@@ -786,6 +797,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             # Get the appropriate event.
             _mechevent = {
                 "WFE": Events.WFE_SKIP,
+                "WURD": Events.WURD_SKIP,
                 "FPS": Events.FPS_SKIP,
                 "HOC": Events.HOC_SKIP,
             }
@@ -1269,9 +1281,11 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         font.setFamily("Bahnschrift Light")
         font.setPointSize(12)
         self.pbWFE.setFont(font)
+        self.pbWURD.setFont(font)
         self.pbFPS.setFont(font)
         self.pbHOC.setFont(font)
         self.pbWFESkip.setFont(font)
+        self.pbWURDSkip.setFont(font)
         self.pbFPSSkip.setFont(font)
         self.pbHOCSkip.setFont(font)
 
@@ -1317,6 +1331,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         # Update the text of the radio buttons.
         _mctrl = {
             "WFE": [self.pbWFE, self.pbWFESkip],
+            "WURD": [self.pbWURD, self.pbWURDSkip],
             "FPS": [self.pbFPS, self.pbFPSSkip],
             "HOC": [self.pbHOC, self.pbHOCSkip],
         }

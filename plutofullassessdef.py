@@ -57,11 +57,12 @@ PROPASS_CTRL_TIMER_DELTA = 0.01
 TIMEPOINTS = ["A0", "A1", "A2"]
 
 # List of mechanisms to be used in the order it is to be used.
-MECHANISMS = ["FPS", "WFE", "HOC"]
+MECHANISMS = ["FPS", "WFE", "WURD", "HOC"]
 
 # Mechanisms labels
 MECH_LABELS = {
     "WFE": "Wrist Flexion/Extension",
+    "WURD": "Ulnar/Radial Deviation",
     "FPS": "Forearm Pronation/Supination",
     "HOC": "Hand Opening/Closing",
 }
@@ -102,6 +103,7 @@ TASK_LABELS = {
 MECH_TASKS = {
     "FPS": [["AROM", "PROM", "APROMSLOW", "APROMFAST"], ["POSHOLD", "DISC"]],
     "WFE": [["AROM", "PROM", "APROMSLOW", "APROMFAST", "DISC"], []],
+    "WURD": [["AROM", "PROM", "APROMSLOW", "APROMFAST", "DISC"], []],
     "HOC": [
         ["AROM", "PROM", "APROMSLOW", "APROMFAST"],
         ["PROP"],
