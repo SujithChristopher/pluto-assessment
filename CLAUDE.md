@@ -9,33 +9,31 @@ A Python/PySide6 desktop GUI application for assessing hand function using **PLU
 ## Running the Application
 
 ```bash
-# Activate the conda environment
-conda activate pa
-
-# Run the full assessment application (main entry point)
-python plutofullassessment.py
+# Use uv to run scripts
+uv run python plutofullassessment.py
 
 # Or run the legacy proprioception-only assessment
-python plutopropass.py
+uv run python plutopropass.py
 ```
 
 The COM port for PLUTO is hardcoded in `plutofullassessdef.py` as `PLUTOCOMM = "COM19"`. Change this to match the connected device.
 
 ## Environment Setup
 
-The project uses a conda environment defined in `environment.yml` (name: `pa`, Python 3.9). A `.venv` with PySide6 is also present in the repo root but targets a different Python version.
-
-```bash
-conda env create -f environment.yml
-conda activate pa
-```
+The project uses `uv` for package management (not conda/pip). A `.venv` is present in the repo root. Always use `uv run <cmd>` — never `conda run` or bare `python`.
 
 ## Regenerating UI Python Files
 
 Qt `.ui` files live in `ui/`. Their generated Python counterparts live in `uipy/`. After editing a `.ui` file in Qt Designer, regenerate with:
 
 ```bash
-pyside6-uic ui/<filename>.ui -o uipy/ui_<name>.py
+uv run pyside6-uic ui/<filename>.ui -o uipy/ui_<name>.py
+```
+
+## Syntax Checking
+
+```bash
+uv run python -m py_compile <file1.py> [file2.py ...]
 ```
 
 ## Architecture
@@ -79,7 +77,7 @@ Each file follows the pattern `pluto<taskname>window.py` and implements a `QMain
 ### Data Management
 - **`plutofullassesssdata.py`** — `PlutoAssessmentData`: Manages the session folder structure under `../fullassessment/`, loads/saves the subject list CSV (`fullassess_subjects.csv`) and per-session summary CSV. Also provides `DataFrameModel` (a `QAbstractTableModel` wrapping a pandas DataFrame for display in Qt table views).
 - **`misc.py`** — `CSVBufferWriter`: Buffered CSV writer used by all task windows to log raw sensor data; flushes on a time interval or when buffer fills.
-- **`async_workers.py`** — `LimbSetupWorker(QThread)`: Offloads blocking file I/O (folder creation, JSON writing) when setting up a limb assessment session.
+- **`async_workers.py`** — `LimbSetupWorker(QThread)`: Offloads blocking file I/O (folder creation, JSON writing, protocol CSV init) when setting up a timepoint session.
 
 ### Subject Management
 - **`subjectcreator.py`** / **`subjectselector.py`** — QDialog subclasses for creating new subject records and selecting existing ones from the subject list CSV.
