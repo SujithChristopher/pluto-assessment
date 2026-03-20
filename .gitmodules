@@ -1,3 +1,6 @@
 [submodule "plutofire"]
 	path = plutofire
 	url = https://github.com/siva82kb/plutofire.git
+[submodule "PLUTO-HOMER"]
+	path = PLUTO-HOMER
+	url = https://github.com/siva82kb/PLUTO-HOMER.git
