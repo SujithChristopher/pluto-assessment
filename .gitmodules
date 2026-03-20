@@ -1,0 +1,3 @@
+[submodule "plutofire"]
+	path = plutofire
+	url = https://github.com/siva82kb/plutofire.git
