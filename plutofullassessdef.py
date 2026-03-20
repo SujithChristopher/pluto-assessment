@@ -53,6 +53,9 @@ SUBJLIST_FILE = f"{DATA_DIR}/fullassess_subjects.csv"
 # Proprioceptive assessment control timer delta (seconds).
 PROPASS_CTRL_TIMER_DELTA = 0.01
 
+# List of time points for longitudinal assessment.
+TIMEPOINTS = ["A0", "A1", "A2"]
+
 # List of mechanisms to be used in the order it is to be used.
 MECHANISMS = ["FPS", "WFE", "HOC"]
 

@@ -53,6 +53,7 @@ from plutofullassesssdata import PlutoAssessmentData
 class Events(Enum):
     SUBJECT_SET = 0
     LIMB_SET = auto()
+    TIMEPOINT_SET = auto()
     #
     # Mechanisms events
     #
@@ -188,6 +189,7 @@ class Events(Enum):
 class States(Enum):
     SUBJ_SELECT = 0
     LIMB_SELECT = auto()
+    TIMEPOINT_SELECT = auto()
     MECH_SELECT = auto()
     MECH_OR_TASK_SELECT = auto()
     CALIBRATE = auto()
@@ -221,6 +223,7 @@ class PlutoFullAssessmentStateMachine:
         self._stateactions = {
             States.SUBJ_SELECT: self._handle_subject_select,
             States.LIMB_SELECT: self._handle_limb_select,
+            States.TIMEPOINT_SELECT: self._handle_timepoint_select,
             States.MECH_SELECT: self._handle_mechanism_select,
             States.CALIBRATE: self._handle_calibrate,
             States.AROM_ASSESS: self._handle_arom_assess,
@@ -295,14 +298,19 @@ class PlutoFullAssessmentStateMachine:
     def _handle_limb_select(self, event, data):
         """ """
         if event == Events.LIMB_SET:
-            # Set limb type and limb.
+            # Set limb (no I/O — just stores the value).
             self._data.set_limb(limb=data["limb"])
-            # We need to now select the mechanism.
-            self._state = States.MECH_SELECT
+            # We need to now select the time point.
+            self._state = States.TIMEPOINT_SELECT
             self._pconsole.append(self._instruction)
-            # Generated assessment protocol.
-            self._data.start_protocol()
-            self.log(f"Protocol started.")
+            self.log(f"Limb set to {data['limb']}. Select a time point.")
+
+    def _handle_timepoint_select(self, event, data):
+        """ """
+        if event == Events.TIMEPOINT_SET:
+            # Folder creation and protocol start are done by the worker.
+            self._state = States.MECH_SELECT
+            self.log(f"Time point set to {data['timepoint']}. Protocol started.")
 
     def _handle_mechanism_select(self, event, data):
         """ """

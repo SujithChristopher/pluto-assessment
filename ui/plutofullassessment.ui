@@ -153,6 +153,57 @@
          </widget>
         </item>
         <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_timepoint">
+          <item>
+           <widget class="QLabel" name="lblTimePoint">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="text">
+             <string>Time Point:</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="cbTimePoint">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string/>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>A0</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>A1</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>A2</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QPushButton" name="pbSetTimePoint">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>Set Time Point</string>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QGroupBox" name="gbMechanisms">
           <property name="enabled">
            <bool>false</bool>

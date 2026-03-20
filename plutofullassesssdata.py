@@ -75,6 +75,10 @@ class PlutoAssessmentData(object):
         return self._limb
 
     @property
+    def timepoint(self):
+        return self._timepoint
+
+    @property
     def session(self):
         return self._session
 
@@ -101,6 +105,7 @@ class PlutoAssessmentData(object):
         self._domlimb = None
         self._afflimb = None
         self._limb = None
+        self._timepoint = None
         self._session = None
         self._basedir = None
         self._sessdir = None
@@ -122,14 +127,22 @@ class PlutoAssessmentData(object):
                 f"Subject ID has not been set. You cannot set anything else without a subject ID."
             )
         self._limb = limb
+
+    def set_timepoint(self, timepoint):
+        # Limb must be set before timepoint
+        if self._limb is None:
+            raise ValueError(
+                f"Limb has not been set. You cannot set a timepoint without a limb."
+            )
+        self._timepoint = timepoint
         self.create_session_folder()
 
     def create_session_folder(self):
         # Create the data directory now.
-        # set data dirr and create if needed.
-        self._session = f"{self.type[0].lower()}{self.limb[0].lower()}_{dt.now().strftime('%Y%m%d_%H%M%S')}"
+        # set data dir and create if needed.
+        self._session = f"{self.type[0].lower()}{self.limb[0].lower()}_{self.timepoint}_{dt.now().strftime('%Y%m%d_%H%M%S')}"
         self._basedir = pathlib.Path(
-            passdef.DATA_DIR, self.type, self.subjid, self.limb
+            passdef.DATA_DIR, self.type, self.subjid, self.limb, self.timepoint
         )
         self._sessdir = pathlib.Path(self.basedir, self.session)
         self.sessdir.mkdir(exist_ok=True, parents=True)
@@ -143,10 +156,36 @@ class PlutoAssessmentData(object):
                     "domlimb": self.domlimb,
                     "afflimb": self.afflimb,
                     "limb": self.limb,
+                    "timepoint": self.timepoint,
                 },
                 fh,
                 indent=4,
             )
+
+    def is_timepoint_completed(self, limb, timepoint) -> bool:
+        """Check if the given timepoint for the given limb is completed."""
+        if self._subjid is None or self._type is None:
+            return False
+        _proto_file = pathlib.Path(
+            passdef.DATA_DIR,
+            self.type,
+            self.subjid,
+            limb,
+            timepoint,
+            f"{self.subjid}_{self.type}_{limb}_{timepoint}_protocol.csv",
+        )
+        if not _proto_file.exists():
+            return False
+        try:
+            _df = pd.read_csv(
+                _proto_file.as_posix(),
+                header=0,
+                index_col=None,
+                dtype=pfadef.SUMMARY_COLUMN_FORMAT,
+            )
+            return not _df["session"].isna().any()
+        except Exception:
+            return False
 
     def get_session_info(self):
         _str = [
@@ -164,23 +203,25 @@ class PlutoAssessmentData(object):
             self.domlimb,
             self.afflimb,
             self.limb,
+            self.timepoint,
             self._basedir,
             self._sessdir,
         )
         self._detailsumry = PlutoAssessmentDetailsData(
-            self.subjid, self.type, self.domlimb, self.afflimb, self.limb, self._basedir
+            self.subjid, self.type, self.domlimb, self.afflimb, self.limb, self.timepoint, self._basedir
         )
 
 
 class PlutoAssessmentProtocolData(object):
     """Class to handle the full assessment protocol."""
 
-    def __init__(self, subjid, stype, domlimb, afflimb, slimb, basedir, sessdir):
+    def __init__(self, subjid, stype, domlimb, afflimb, slimb, timepoint, basedir, sessdir):
         self._subjid = subjid
         self._type = stype
         self._domlimb = domlimb
         self._afflimb = afflimb
         self._limb = slimb
+        self._timepoint = timepoint
         self._basedir = basedir
         self._sessdir = sessdir
 
@@ -236,7 +277,7 @@ class PlutoAssessmentProtocolData(object):
     @property
     def filename(self):
         return pathlib.Path(
-            self._basedir, f"{self._subjid}_{self._type}_{self._limb}_protocol.csv"
+            self._basedir, f"{self._subjid}_{self._type}_{self._limb}_{self._timepoint}_protocol.csv"
         ).as_posix()
 
     @property
@@ -619,12 +660,13 @@ class PlutoAssessmentProtocolData(object):
 class PlutoAssessmentDetailsData(object):
     """Class to store the details of the assessment data."""
 
-    def __init__(self, subjid, stype, domlimb, afflimb, slimb, basedir):
+    def __init__(self, subjid, stype, domlimb, afflimb, slimb, timepoint, basedir):
         self._subjid = subjid
         self._type = stype
         self._domlimb = domlimb
         self._afflimb = afflimb
         self._limb = slimb
+        self._timepoint = timepoint
         self._basedir = basedir
 
         # Read the summary file.
@@ -660,7 +702,7 @@ class PlutoAssessmentDetailsData(object):
     @property
     def filename(self):
         return pathlib.Path(
-            self._basedir, f"{self._subjid}_{self._type}_{self._limb}_details.json"
+            self._basedir, f"{self._subjid}_{self._type}_{self._limb}_{self._timepoint}_details.json"
         ).as_posix()
 
     def __getitem__(self, key):

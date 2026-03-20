@@ -11,7 +11,7 @@ import traceback
 
 
 class LimbSetupWorker(QThread):
-    """Worker thread to handle blocking I/O operations for limb selection."""
+    """Worker thread to handle blocking I/O operations for timepoint selection."""
 
     # Signals
     started = Signal()  # Emitted when worker starts
@@ -19,27 +19,27 @@ class LimbSetupWorker(QThread):
     error = Signal(str)  # Emitted if an error occurs
     progress = Signal(str)  # Emitted to provide progress updates
 
-    def __init__(self, data_obj, limb_text, parent=None):
+    def __init__(self, data_obj, timepoint_text, parent=None):
         """
         Initialize the worker.
 
         Args:
             data_obj: PlutoAssessmentData instance
-            limb_text: The limb text (e.g., "Left" or "Right")
+            timepoint_text: The time point (e.g., "A0", "A1", "A2")
             parent: Parent QObject
         """
         super().__init__(parent)
         self.data_obj = data_obj
-        self.limb_text = limb_text.lower()
+        self.timepoint_text = timepoint_text
 
     def run(self):
         """Run the blocking I/O operations in the worker thread."""
         try:
             self.started.emit()
 
-            # Step 1: Set the limb (creates folder and JSON file) - blocking I/O
-            self.progress.emit("Setting limb and creating session folder...")
-            self.data_obj.set_limb(self.limb_text)
+            # Step 1: Set the timepoint (creates folder and JSON file) - blocking I/O
+            self.progress.emit("Creating session folder...")
+            self.data_obj.set_timepoint(self.timepoint_text)
 
             # Step 2: Initialize protocol data (reads CSV, parses with pandas) - blocking I/O
             self.progress.emit("Initializing protocol...")
@@ -49,5 +49,5 @@ class LimbSetupWorker(QThread):
             self.finished.emit()
 
         except Exception as e:
-            error_msg = f"Error during limb setup: {str(e)}\n{traceback.format_exc()}"
+            error_msg = f"Error during timepoint setup: {str(e)}\n{traceback.format_exc()}"
             self.error.emit(error_msg)

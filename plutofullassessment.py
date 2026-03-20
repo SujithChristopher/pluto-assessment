@@ -143,6 +143,9 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         # Limb
         self.cbLimb.currentIndexChanged.connect(self.update_ui)
         self.pbSetLimb.clicked.connect(self._callback_limb_set)
+        # Time point
+        self.cbTimePoint.currentIndexChanged.connect(self.update_ui)
+        self.pbSetTimePoint.clicked.connect(self._callback_timepoint_set)
         # Mechanisms and skip
         self.pbWFE.clicked.connect(self._callback_wfe_assess)
         self.pbWFESkip.clicked.connect(self._callback_wfe_skip)
@@ -197,9 +200,6 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self._currwndclosed = False
 
     def _callback_limb_set(self):
-        # Check the text of the button.
-        if self.pbSetLimb.text() == "Reset Limb":
-            return
         # Open dialog to confirm limb selection (Ok or cancel).
         reply = QMessageBox.question(
             self,
@@ -208,35 +208,64 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             QMessageBox.Ok | QMessageBox.Cancel,
         )
         if reply == QMessageBox.Ok:
-            # Disable the button while processing
-            self.pbSetLimb.setEnabled(False)
-            self.statusBar().showMessage("Setting up limb and protocol... Please wait.")
-
-            # Create and start the worker thread for I/O operations only
-            self._limb_setup_worker = LimbSetupWorker(
-                self.data, self.cbLimb.currentText()
-            )
-            # Connect worker signals
-            self._limb_setup_worker.progress.connect(self._on_worker_progress)
-            self._limb_setup_worker.finished.connect(self._on_worker_finished)
-            self._limb_setup_worker.error.connect(self._on_worker_error)
-            # Start the worker
-            self._limb_setup_worker.start()
-
-    def _on_worker_progress(self, message):
-        """Handle progress updates from worker thread."""
-        self.statusBar().showMessage(message)
-
-    def _on_worker_finished(self):
-        """Handle worker thread completion."""
-        try:
-            # Now that I/O is done, run the state machine on the main thread
-            self.statusBar().showMessage("Finalizing setup...")
+            # set_limb() is now I/O-free — call state machine directly on main thread
             self._smachine.run_statemachine(
                 Events.LIMB_SET, {"limb": self.cbLimb.currentText().lower()}
             )
+            self._populate_timepoint_combobox()
+            self.update_ui()
+            self.statusBar().showMessage("Limb set. Select a time point.")
 
-            # Update window title and UI with new data
+    def _populate_timepoint_combobox(self):
+        """Populate cbTimePoint, disabling any already-completed time points."""
+        model = self.cbTimePoint.model()
+        first_available = 0
+        for i, tp in enumerate(pfadef.TIMEPOINTS):
+            # item index 0 is the blank entry, timepoints start at index 1
+            item_index = i + 1
+            item = model.item(item_index)
+            if item is None:
+                continue
+            completed = self.data.is_timepoint_completed(self.data.limb, tp)
+            if completed:
+                item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEnabled)
+            else:
+                item.setFlags(item.flags() | QtCore.Qt.ItemIsEnabled)
+                if first_available == 0:
+                    first_available = item_index
+        self.cbTimePoint.setCurrentIndex(first_available)
+
+    def _callback_timepoint_set(self):
+        """Handle Set Time Point button click."""
+        tp = self.cbTimePoint.currentText()
+        if not tp:
+            return
+        reply = QMessageBox.question(
+            self,
+            "Confirm",
+            f"Time point {tp} selected. Continue?",
+            QMessageBox.Ok | QMessageBox.Cancel,
+        )
+        if reply == QMessageBox.Ok:
+            self.pbSetTimePoint.setEnabled(False)
+            self.statusBar().showMessage("Creating session folder and protocol... Please wait.")
+            self._limb_setup_worker = LimbSetupWorker(self.data, tp)
+            self._limb_setup_worker.progress.connect(self._on_timepoint_worker_progress)
+            self._limb_setup_worker.finished.connect(self._on_timepoint_worker_finished)
+            self._limb_setup_worker.error.connect(self._on_timepoint_worker_error)
+            self._limb_setup_worker.start()
+
+    def _on_timepoint_worker_progress(self, message):
+        """Handle progress updates from timepoint worker thread."""
+        self.statusBar().showMessage(message)
+
+    def _on_timepoint_worker_finished(self):
+        """Handle timepoint worker thread completion."""
+        try:
+            self.statusBar().showMessage("Finalizing setup...")
+            self._smachine.run_statemachine(
+                Events.TIMEPOINT_SET, {"timepoint": self.data.timepoint}
+            )
             self._title = " | ".join(
                 [
                     "Pluto Full Assessment",
@@ -245,31 +274,27 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
                     f"Dom: {self.data.domlimb}",
                     f"Aff: {self.data.afflimb}",
                     f"Limb: {self.data.limb}",
+                    f"TP: {self.data.timepoint}",
                     f"{self.data.session}",
                 ]
             )
             self.setWindowTitle(self._title)
             self.update_ui()
-            self.statusBar().showMessage("Limb setup completed successfully.")
+            self.statusBar().showMessage("Time point setup completed successfully.")
         except Exception as e:
-            self._on_worker_error(f"Error updating UI after setup: {str(e)}")
+            self._on_timepoint_worker_error(f"Error updating UI after setup: {str(e)}")
         finally:
-            # Re-enable the button
-            self.pbSetLimb.setEnabled(True)
-            # Clean up worker reference
+            self.pbSetTimePoint.setEnabled(True)
             self._limb_setup_worker = None
 
-    def _on_worker_error(self, error_message):
-        """Handle errors from worker thread."""
-        # Re-enable the button
-        self.pbSetLimb.setEnabled(True)
-        # Clean up worker reference
+    def _on_timepoint_worker_error(self, error_message):
+        """Handle errors from timepoint worker thread."""
+        self.pbSetTimePoint.setEnabled(True)
         self._limb_setup_worker = None
-        # Show error dialog
         QMessageBox.critical(
-            self, "Error", f"Error during limb setup:\n{error_message}"
+            self, "Error", f"Error during time point setup:\n{error_message}"
         )
-        self.statusBar().showMessage("Error during limb setup.")
+        self.statusBar().showMessage("Error during time point setup.")
 
     def _callback_calibrate(self):
         # Disable main controls
@@ -1166,9 +1191,21 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self.lblSubjDetails.setText(self._subjdetails)
         self.lblLimb.setEnabled(_lmbflag)
         self.cbLimb.setEnabled(_lmbflag)
+        self.pbSetLimb.setEnabled(
+            self.cbLimb.currentText() != ""
+            and self._smachine.state == States.LIMB_SELECT
+        )
 
-        # Set limb button
-        self.pbSetLimb.setEnabled(self.cbLimb.currentText() != "")
+        # Time point selection
+        _tpflag = (
+            self._maindisable is False
+            and self._smachine.state == States.TIMEPOINT_SELECT
+        )
+        self.lblTimePoint.setEnabled(_tpflag)
+        self.cbTimePoint.setEnabled(_tpflag)
+        self.pbSetTimePoint.setEnabled(
+            _tpflag and self.cbTimePoint.currentText() != ""
+        )
 
         # Update the table.
         if self.protocol and self.protocol.df is not None and self._updatetable:
@@ -1183,10 +1220,6 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _mechflag = self._maindisable is False and (
             self._smachine.state == States.MECH_SELECT
             or self._smachine.state == States.MECH_OR_TASK_SELECT
-        )
-        self.pbSetLimb.setEnabled(
-            self.cbLimb.currentText() != ""
-            and self._smachine.state == States.LIMB_SELECT
         )
         self.gbMechanisms.setEnabled(_mechflag)
 
@@ -1258,6 +1291,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             f"{'' if self.data.subjid is None else self.data.subjid:<8}",
             f"{self.data.type if self.data.type is not None else '':<8}",
             f"{self.data.limb if self.data.limb is not None else '':<8}",
+            f"{self.data.timepoint if self.data.timepoint is not None else '':<4}",
         ]
         return ":".join(_str)
 
