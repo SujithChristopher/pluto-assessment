@@ -302,12 +302,20 @@ class PlutoAssessmentProtocolData(object):
         return _mechdf_nanrows["task"].unique().tolist()
 
     @property
-    def task_enabled(self) -> list[str]:
-        """List of tasks that are to be enabled."""
-        if self._df is None or self._mech is None or self._index is None:
+    def task_enabled(self) -> str:
+        """Get the next task for the currently selected mechanism."""
+        if self._df is None or self._mech is None:
             return None
-        # Get the list of mechanisms that have been assessed.
-        return self._df.iloc[self._index]["task"]
+        
+        # Find the first incomplete task for the current mechanism
+        _mechdf = self._df[self._df["mechanism"] == self._mech]
+        _nan_rows = _mechdf[_mechdf["session"].isna()]
+        if not _nan_rows.empty:
+            return _nan_rows.iloc[0]["task"]
+        
+        # If all tasks for this mechanism are complete, return None or handle as needed
+        # Returning None means no "new" task is suggested for this mechanism.
+        return None
 
     @property
     def is_mechanism_completed(self, mechname):
@@ -368,14 +376,16 @@ class PlutoAssessmentProtocolData(object):
             self._index = None
 
     def set_mechanism(self, mechname):
-        # Sanity check. Make sure the set mechanism matches the mechnaism in the protocol.
-        if (
-            self._index is not None
-            and mechname != self._df.iloc[self._index]["mechanism"]
-        ):
-            raise ValueError(
-                f"Mechanism [{mechname}] does not match the protocol mechanism [{self._df.iloc[self._index]['mechanism']}]"
-            )
+        # Sanity check. Allow selecting any mechanism that is already enabled.
+        if mechname not in self.mech_enabled:
+            # If it's not in mech_enabled, check if it's the very next one in the protocol.
+            if (
+                self._index is not None
+                and mechname != self._df.iloc[self._index]["mechanism"]
+            ):
+                raise ValueError(
+                    f"Mechanism [{mechname}] does not match the protocol mechanism [{self._df.iloc[self._index]['mechanism']}]"
+                )
         self._mech = mechname
         self._calibrated = False
         self._task = None
@@ -401,16 +411,15 @@ class PlutoAssessmentProtocolData(object):
         self._update_index()
 
     def set_task(self, taskname):
-        # Sanity check. Make sure the set task matches the task in the protocol.
-        print(f"{taskname}, {self._index}, {self._df.iloc[self._index]['task']}")
-        if taskname != self._df.iloc[self._index]["task"]:
-            raise ValueError(
-                f"Task [{taskname}] does not match the protocol task [{self._df.iloc[self._index]['task']}]"
-            )
+        # Sanity check. Allow selecting any task that is valid for the current mechanism.
+        if taskname not in self.all_tasks_for_mechanism:
+             raise ValueError(f"Task [{taskname}] is not valid for mechanism [{self._mech}]")
+             
+        # If the mechanism is NOT yet completed, we might want to enforce sequential order within it.
+        # But for now, let's be lenient to allow re-assessment.
         self._task = taskname
         self._tasktime = dt.now().strftime("%Y%m%d_%H%M%S")
         # Update current index.
-        # Update current index to first row where 'session' is still NaN
         self._update_index()
 
     def skip_task(self, taskname, session, comment):
