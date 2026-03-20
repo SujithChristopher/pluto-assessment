@@ -26,7 +26,7 @@ from plutodefs import PlutoEvents as PlEvnts
 import plutofullassessdef as pfadef
 from plutofullassessdef import ForceControl
 from plutofullassessdef import ForceControl as FCtrl
-from ui_plutoapromassess import Ui_APRomAssessWindow
+from uipy.ui_plutoapromassess import Ui_APRomAssessWindow
 from myqt import CommentDialog
 from plutodataviewwindow import PlutoDataViewWindow
 from plutoapromwindow import RawDataLoggingState as LogState

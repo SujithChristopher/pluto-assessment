@@ -21,7 +21,7 @@ from enum import Enum
 
 import plutodefs as pdef
 from plutodataviewwindow import PlutoDataViewWindow
-from ui_plutocalib import Ui_CalibrationWindow
+from uipy.ui_plutocalib import Ui_CalibrationWindow
 
 # Some timing constants
 CALIB_DUMMY_TIME = 0.25  # Time to wait for dummy calibration

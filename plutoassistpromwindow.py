@@ -23,7 +23,7 @@ from enum import Enum
 import plutodefs as pdef
 import plutofullassessdef as pfadef
 import misc
-from ui_plutoapromassess import Ui_APRomAssessWindow
+from uipy.ui_plutoapromassess import Ui_APRomAssessWindow
 from myqt import CommentDialog
 
 from plutodataviewwindow import PlutoDataViewWindow

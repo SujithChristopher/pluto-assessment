@@ -44,7 +44,7 @@ from PySide6.QtCore import QAbstractTableModel, Qt
 # from plutoromwindow import PlutoRomAssessWindow
 # from plutopropassesswindow import PlutoPropAssessWindow
 
-# from ui_plutofullassessment import Ui_PlutoFullAssessor
+# from uipy.ui_plutofullassessment import Ui_PlutoFullAssessor
 
 from plutofullassesssdata import PlutoAssessmentData
 # from misc import CSVBufferWriter

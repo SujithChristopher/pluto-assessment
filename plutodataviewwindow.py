@@ -19,7 +19,7 @@ from PySide6.QtGui import QKeyEvent
 from enum import Enum
 
 import plutodefs as pdef
-from ui_plutodataview import Ui_DevDataWindow
+from uipy.ui_plutodataview import Ui_DevDataWindow
 
 
 class PlutoDataViewWindow(QtWidgets.QMainWindow):

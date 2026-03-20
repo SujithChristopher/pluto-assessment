@@ -37,7 +37,7 @@ from plutoromwindow import PlutoRomAssessWindow
 from plutopropassesswindow import PlutoPropAssessWindow
 from plutoforcecontrolwindow import PlutoForceControlWindow
 from myqt import MechTaskSkipDialog
-from ui_plutofullassessment import Ui_PlutoFullAssessor
+from uipy.ui_plutofullassessment import Ui_PlutoFullAssessor
 
 import plutodefs as pdef
 import plutofullassessdef as pfadef

@@ -19,7 +19,7 @@ from PySide6.QtCore import QTimer
 
 import plutodefs as pdef
 from plutodataviewwindow import PlutoDataViewWindow
-from ui_plutotestcontrol import Ui_PlutoTestControlWindow
+from uipy.ui_plutotestcontrol import Ui_PlutoTestControlWindow
 
 
 class PlutoTestControlWindow(QtWidgets.QMainWindow):

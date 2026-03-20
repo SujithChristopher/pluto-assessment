@@ -1,14 +1,14 @@
 
-pyuic5 -o ui_plutocalib.py ui/plutocalib.ui
-pyuic5 -o ui_plutodataview.py ui/plutodataview.ui
-pyuic5 -o ui_plutopropass.py ui/plutopropass.ui
-pyuic5 -o ui_plutofullassessment.py ui/plutofullassessment.ui
-pyuic5 -o ui_plutopropvis.py ui/plutopropvis.ui
-pyuic5 -o ui_plutoromassess.py ui/plutoromassess.ui
-pyuic5 -o ui_plutoapromassess.py ui/plutoapromassess.ui
-pyuic5 -o ui_plutotestcontrol.py ui/plutotestcontrol.ui
-pyuic5 -o ui_plutopropassessctrl.py ui/plutopropassessctrl.ui
-pyuic5 -o ui_plutocontroltester.py ui/plutocontroltester.ui
-pyuic5 -o ui_plutoposholdassess.py ui/plutoposholdassess.ui
-pyuic5 -o ui_subjectcreator.py ui/subjectcreator.ui
-pyuic5 -o ui_subjectselector.py ui/subjectselector.ui
+uv run pyside6-uic ui/plutocalib.ui -o uipy/ui_plutocalib.py
+uv run pyside6-uic ui/plutodataview.ui -o uipy/ui_plutodataview.py
+uv run pyside6-uic ui/plutopropass.ui -o uipy/ui_plutopropass.py
+uv run pyside6-uic ui/plutofullassessment.ui -o uipy/ui_plutofullassessment.py
+uv run pyside6-uic ui/plutopropvis.ui -o uipy/ui_plutopropvis.py
+uv run pyside6-uic ui/plutoromassess.ui -o uipy/ui_plutoromassess.py
+uv run pyside6-uic ui/plutoapromassess.ui -o uipy/ui_plutoapromassess.py
+uv run pyside6-uic ui/plutotestcontrol.ui -o uipy/ui_plutotestcontrol.py
+uv run pyside6-uic ui/plutopropassessctrl.ui -o uipy/ui_plutopropassessctrl.py
+uv run pyside6-uic ui/plutocontroltester.ui -o uipy/ui_plutocontroltester.py
+uv run pyside6-uic ui/plutoposholdassess.ui -o uipy/ui_plutoposholdassess.py
+uv run pyside6-uic ui/subjectcreator.ui -o uipy/ui_subjectcreator.py
+uv run pyside6-uic ui/subjectselector.ui -o uipy/ui_subjectselector.py

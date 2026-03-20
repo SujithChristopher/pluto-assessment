@@ -21,7 +21,7 @@ import pyqtgraph as pg
 from enum import Enum
 
 import plutodefs as pdef
-from ui_plutoromassess import Ui_RomAssessWindow
+from uipy.ui_plutoromassess import Ui_RomAssessWindow
 
 
 class PlutoRomAssessEvent(Enum):

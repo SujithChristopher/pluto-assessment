@@ -24,7 +24,7 @@ import plutodefs as pdef
 import plutofullassessdef as pfadef
 from plutofullassessdef import DiscreteReach
 from plutoapromwindow import RawDataLoggingState
-from ui_plutoapromassess import Ui_APRomAssessWindow
+from uipy.ui_plutoapromassess import Ui_APRomAssessWindow
 from myqt import CommentDialog
 
 from misc import CSVBufferWriter

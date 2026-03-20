@@ -30,7 +30,7 @@ from plutotestwindow import PlutoTestControlWindow
 from plutoromwindow import PlutoRomAssessWindow
 from plutopropassesswindow import PlutoPropAssessWindow
 
-from ui_plutopropass import Ui_PlutoPropAssessor
+from uipy.ui_plutopropass import Ui_PlutoPropAssessor
 
 
 class PlutoPropAssesor(QtWidgets.QMainWindow, Ui_PlutoPropAssessor):

@@ -26,7 +26,7 @@ import plutodefs as pdef
 import plutofullassessdef as pfadef
 from plutofullassessdef import PositionHold
 from plutoapromwindow import RawDataLoggingState
-from ui_plutoposholdassess import Ui_PosHoldAssessWindow
+from uipy.ui_plutoposholdassess import Ui_PosHoldAssessWindow
 from myqt import CommentDialog
 from myqt import create_sector
 

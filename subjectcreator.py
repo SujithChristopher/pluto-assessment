@@ -18,7 +18,7 @@ from PySide6 import (
 from PySide6.QtCore import QTimer
 from enum import Enum
 
-from ui_subjectcreator import Ui_PlutoSubjectCreatorWindow
+from uipy.ui_subjectcreator import Ui_PlutoSubjectCreatorWindow
 import plutofullassessdef as pfadef
 
 

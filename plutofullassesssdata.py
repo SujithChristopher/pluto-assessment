@@ -43,7 +43,7 @@ from plutoapromwindow import PlutoAPRomAssessWindow
 from plutoromwindow import PlutoRomAssessWindow
 from plutopropassesswindow import PlutoPropAssessWindow
 
-from ui_plutofullassessment import Ui_PlutoFullAssessor
+from uipy.ui_plutofullassessment import Ui_PlutoFullAssessor
 
 from misc import CSVBufferWriter
 

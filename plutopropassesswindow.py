@@ -26,8 +26,8 @@ import winsound
 
 import plutodefs as pdef
 from plutodefs import PlutoEvents as PlEvnts
-from ui_plutopropassessctrl import Ui_ProprioceptionAssessWindow
-from ui_plutoapromassess import Ui_APRomAssessWindow
+from uipy.ui_plutopropassessctrl import Ui_ProprioceptionAssessWindow
+from uipy.ui_plutoapromassess import Ui_APRomAssessWindow
 from myqt import CommentDialog
 from plutodataviewwindow import PlutoDataViewWindow
 import plutoassessdef as passdef
