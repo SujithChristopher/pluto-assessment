@@ -67,7 +67,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
 
         # Fix UI accessibility - remove fixed size constraints that cause clipping
         # Keep minimum size for usability, but allow resizing
-        self.setMinimumSize(1200, 607)
+        self.setMinimumSize(1280, 720)
         self.setMaximumSize(16777215, 16777215)  # Reset to default max
 
         self._flag = False
@@ -77,7 +77,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         # Move close to top left corner and set initial size
         self.move(50, 100)
         # Resize to a reasonable default that fits most screens
-        self.resize(1400, 800)
+        self.resize(1500, 860)
 
         # PLUTO COM
         self.pluto: QtPluto = QtPluto(port)
@@ -1234,7 +1234,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
     def _one_time_setup(self):
         font = QtGui.QFont()
         font.setFamily("Bahnschrift Light")
-        font.setPointSize(10)
+        font.setPointSize(12)
         self.pbWFE.setFont(font)
         self.pbFPS.setFont(font)
         self.pbHOC.setFont(font)

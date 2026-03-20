@@ -30,7 +30,7 @@ class Ui_PlutoFullAssessor(object):
         PlutoFullAssessor.setMaximumSize(QSize(1200, 607))
         font = QFont()
         font.setFamilies([u"Bahnschrift Light"])
-        font.setPointSize(10)
+        font.setPointSize(12)
         PlutoFullAssessor.setFont(font)
         self.centralwidget = QWidget(PlutoFullAssessor)
         self.centralwidget.setObjectName(u"centralwidget")
@@ -57,11 +57,11 @@ class Ui_PlutoFullAssessor(object):
 
         self.lblSubjDetails = QLabel(self.centralwidget)
         self.lblSubjDetails.setObjectName(u"lblSubjDetails")
-        self.lblSubjDetails.setMinimumSize(QSize(250, 16))
-        self.lblSubjDetails.setMaximumSize(QSize(250, 16))
+        self.lblSubjDetails.setMinimumSize(QSize(300, 28))
+        self.lblSubjDetails.setMaximumSize(QSize(16777215, 32))
         font1 = QFont()
         font1.setFamilies([u"Cascadia Code Light"])
-        font1.setPointSize(9)
+        font1.setPointSize(11)
         self.lblSubjDetails.setFont(font1)
 
         self.verticalLayout.addWidget(self.lblSubjDetails)
@@ -112,7 +112,7 @@ class Ui_PlutoFullAssessor(object):
         self.pbFPSSkip = QPushButton(self.gbMechanisms)
         self.pbFPSSkip.setObjectName(u"pbFPSSkip")
         self.pbFPSSkip.setEnabled(False)
-        self.pbFPSSkip.setMaximumSize(QSize(30, 16777215))
+        self.pbFPSSkip.setMaximumSize(QSize(45, 16777215))
 
         self.horizontalLayout_17.addWidget(self.pbFPSSkip)
 
@@ -133,7 +133,7 @@ class Ui_PlutoFullAssessor(object):
         self.pbWFESkip = QPushButton(self.gbMechanisms)
         self.pbWFESkip.setObjectName(u"pbWFESkip")
         self.pbWFESkip.setEnabled(False)
-        self.pbWFESkip.setMaximumSize(QSize(30, 16777215))
+        self.pbWFESkip.setMaximumSize(QSize(45, 16777215))
 
         self.horizontalLayout_16.addWidget(self.pbWFESkip)
 
@@ -154,7 +154,7 @@ class Ui_PlutoFullAssessor(object):
         self.pbHOCSkip = QPushButton(self.gbMechanisms)
         self.pbHOCSkip.setObjectName(u"pbHOCSkip")
         self.pbHOCSkip.setEnabled(False)
-        self.pbHOCSkip.setMaximumSize(QSize(30, 16777215))
+        self.pbHOCSkip.setMaximumSize(QSize(45, 16777215))
 
         self.horizontalLayout_15.addWidget(self.pbHOCSkip)
 
@@ -186,7 +186,7 @@ class Ui_PlutoFullAssessor(object):
         self.pbAROMSkip = QPushButton(self.centralwidget)
         self.pbAROMSkip.setObjectName(u"pbAROMSkip")
         self.pbAROMSkip.setEnabled(False)
-        self.pbAROMSkip.setMaximumSize(QSize(30, 16777215))
+        self.pbAROMSkip.setMaximumSize(QSize(45, 16777215))
 
         self.horizontalLayout.addWidget(self.pbAROMSkip)
 
@@ -207,7 +207,7 @@ class Ui_PlutoFullAssessor(object):
         self.pbPROMSkip = QPushButton(self.centralwidget)
         self.pbPROMSkip.setObjectName(u"pbPROMSkip")
         self.pbPROMSkip.setEnabled(False)
-        self.pbPROMSkip.setMaximumSize(QSize(30, 16777215))
+        self.pbPROMSkip.setMaximumSize(QSize(45, 16777215))
 
         self.horizontalLayout_6.addWidget(self.pbPROMSkip)
 
@@ -228,7 +228,7 @@ class Ui_PlutoFullAssessor(object):
         self.pbAPROMSlowSkip = QPushButton(self.centralwidget)
         self.pbAPROMSlowSkip.setObjectName(u"pbAPROMSlowSkip")
         self.pbAPROMSlowSkip.setEnabled(False)
-        self.pbAPROMSlowSkip.setMaximumSize(QSize(30, 16777215))
+        self.pbAPROMSlowSkip.setMaximumSize(QSize(45, 16777215))
 
         self.horizontalLayout_7.addWidget(self.pbAPROMSlowSkip)
 
@@ -249,7 +249,7 @@ class Ui_PlutoFullAssessor(object):
         self.pbAPROMFastSkip = QPushButton(self.centralwidget)
         self.pbAPROMFastSkip.setObjectName(u"pbAPROMFastSkip")
         self.pbAPROMFastSkip.setEnabled(False)
-        self.pbAPROMFastSkip.setMaximumSize(QSize(30, 16777215))
+        self.pbAPROMFastSkip.setMaximumSize(QSize(45, 16777215))
 
         self.horizontalLayout_8.addWidget(self.pbAPROMFastSkip)
 
@@ -270,7 +270,7 @@ class Ui_PlutoFullAssessor(object):
         self.pbDiscReachSkip = QPushButton(self.centralwidget)
         self.pbDiscReachSkip.setObjectName(u"pbDiscReachSkip")
         self.pbDiscReachSkip.setEnabled(False)
-        self.pbDiscReachSkip.setMaximumSize(QSize(30, 16777215))
+        self.pbDiscReachSkip.setMaximumSize(QSize(45, 16777215))
 
         self.horizontalLayout_9.addWidget(self.pbDiscReachSkip)
 
@@ -291,7 +291,7 @@ class Ui_PlutoFullAssessor(object):
         self.pbPosHoldSkip = QPushButton(self.centralwidget)
         self.pbPosHoldSkip.setObjectName(u"pbPosHoldSkip")
         self.pbPosHoldSkip.setEnabled(False)
-        self.pbPosHoldSkip.setMaximumSize(QSize(30, 16777215))
+        self.pbPosHoldSkip.setMaximumSize(QSize(45, 16777215))
 
         self.horizontalLayout_10.addWidget(self.pbPosHoldSkip)
 
@@ -312,7 +312,7 @@ class Ui_PlutoFullAssessor(object):
         self.pbPropSkip = QPushButton(self.centralwidget)
         self.pbPropSkip.setObjectName(u"pbPropSkip")
         self.pbPropSkip.setEnabled(False)
-        self.pbPropSkip.setMaximumSize(QSize(30, 16777215))
+        self.pbPropSkip.setMaximumSize(QSize(45, 16777215))
 
         self.horizontalLayout_11.addWidget(self.pbPropSkip)
 
@@ -333,7 +333,7 @@ class Ui_PlutoFullAssessor(object):
         self.pbForceCtrlLowSkip = QPushButton(self.centralwidget)
         self.pbForceCtrlLowSkip.setObjectName(u"pbForceCtrlLowSkip")
         self.pbForceCtrlLowSkip.setEnabled(False)
-        self.pbForceCtrlLowSkip.setMaximumSize(QSize(30, 16777215))
+        self.pbForceCtrlLowSkip.setMaximumSize(QSize(45, 16777215))
 
         self.horizontalLayout_12.addWidget(self.pbForceCtrlLowSkip)
 
@@ -354,7 +354,7 @@ class Ui_PlutoFullAssessor(object):
         self.pbForceCtrlMedSkip = QPushButton(self.centralwidget)
         self.pbForceCtrlMedSkip.setObjectName(u"pbForceCtrlMedSkip")
         self.pbForceCtrlMedSkip.setEnabled(False)
-        self.pbForceCtrlMedSkip.setMaximumSize(QSize(30, 16777215))
+        self.pbForceCtrlMedSkip.setMaximumSize(QSize(45, 16777215))
 
         self.horizontalLayout_13.addWidget(self.pbForceCtrlMedSkip)
 
@@ -375,7 +375,7 @@ class Ui_PlutoFullAssessor(object):
         self.pbForceCtrlHighSkip = QPushButton(self.centralwidget)
         self.pbForceCtrlHighSkip.setObjectName(u"pbForceCtrlHighSkip")
         self.pbForceCtrlHighSkip.setEnabled(False)
-        self.pbForceCtrlHighSkip.setMaximumSize(QSize(30, 16777215))
+        self.pbForceCtrlHighSkip.setMaximumSize(QSize(45, 16777215))
 
         self.horizontalLayout_14.addWidget(self.pbForceCtrlHighSkip)
 
@@ -399,7 +399,7 @@ class Ui_PlutoFullAssessor(object):
         self.textPlutoData.setEnabled(False)
         self.textPlutoData.setStyleSheet(u"background-color: rgb(0, 0, 0);\n"
 "color: rgb(0, 255, 60);\n"
-"font: 8pt \"Cascadia Mono\";\n"
+"font: 10pt \"Cascadia Mono\";\n"
 "border: none;")
         self.textPlutoData.setReadOnly(True)
 
@@ -409,7 +409,7 @@ class Ui_PlutoFullAssessor(object):
         self.lblSessionInfo.setObjectName(u"lblSessionInfo")
         font2 = QFont()
         font2.setFamilies([u"Cascadia Mono"])
-        font2.setPointSize(8)
+        font2.setPointSize(10)
         self.lblSessionInfo.setFont(font2)
         self.lblSessionInfo.setStyleSheet(u"color: rgb(170, 0, 0);")
 
@@ -420,11 +420,11 @@ class Ui_PlutoFullAssessor(object):
         self.textProtocolDetails.setEnabled(False)
         font3 = QFont()
         font3.setFamilies([u"Cascadia Mono"])
-        font3.setPointSize(8)
+        font3.setPointSize(10)
         font3.setBold(False)
         font3.setItalic(False)
         self.textProtocolDetails.setFont(font3)
-        self.textProtocolDetails.setStyleSheet(u"font: 8pt \"Cascadia Mono\";\n"
+        self.textProtocolDetails.setStyleSheet(u"font: 10pt \"Cascadia Mono\";\n"
 "background: transparent;\n"
 "color: ;\n"
 "color: rgb(130, 130, 130);\n"
@@ -462,7 +462,7 @@ class Ui_PlutoFullAssessor(object):
         self.statusbar.setObjectName(u"statusbar")
         font4 = QFont()
         font4.setFamilies([u"Cascadia Mono"])
-        font4.setPointSize(9)
+        font4.setPointSize(11)
         self.statusbar.setFont(font4)
         PlutoFullAssessor.setStatusBar(self.statusbar)
 
