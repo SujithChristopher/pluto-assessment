@@ -134,6 +134,14 @@ class QtPluto(QObject):
         return pdef.HOCScale * abs(self.currsensordata[0]) if _dtype else None
 
     @property
+    def gripforce(self):
+        _dtype = (
+            self.datatype == pdef.OutDataType["SENSORSTREAM"]
+            or self.datatype == pdef.OutDataType["DIAGNOSTICS"]
+        )
+        return self.currsensordata[1] if _dtype else None
+
+    @property
     def torque(self):
         if self.control is None:
             return None

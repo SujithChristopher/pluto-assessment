@@ -29,7 +29,8 @@
       "Bash(find E:homerpluto-assessment -name *.csv -type f)",
       "Bash(grep -E \"\\\\.py$\")",
       "Bash(conda run:*)",
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "Bash(grep -rn \"pluto\\\\.gripforce\" *.py)"
     ]
   }
 }

@@ -47,6 +47,11 @@ ControlTypes = {
     "POSITIONAAN": 0x04,
 }
 
+ControlHoldTypes = {
+    "HOLD": 1,
+    "DECAY": 0,
+}
+
 Mechanisms = {
     "NOMECH": 0x00,
     "WFE": 0x01,
