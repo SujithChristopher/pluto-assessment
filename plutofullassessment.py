@@ -1361,10 +1361,16 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             "FCTRLMED": [self.pbForceCtrlMed, self.pbForceCtrlMedSkip],
             "FCTRLHIGH": [self.pbForceCtrlHigh, self.pbForceCtrlHighSkip],
         }
+        import debugconfig
         # Go through all tasks for the mechanism and enable/disable them appropriately.
         for i, _t in enumerate(pfadef.ALLTASKS):
             _taskstatus = self.protocol.get_task_status(_t)
-            if self.protocol.calibrated and _t == self.protocol.task_enabled:
+            _task_gate = (
+                _taskstatus == pfadef.AssessStatus.INCOMPLETE
+                if debugconfig.DEBUG
+                else self.protocol.calibrated and _t == self.protocol.task_enabled
+            )
+            if _task_gate:
                 _tctrl[_t][0].setEnabled(_taskstatus == pfadef.AssessStatus.INCOMPLETE)
                 _tctrl[_t][0].setStyleSheet(pfadef.STATUS_STYLESHEET[_taskstatus])
                 _tctrl[_t][0].setText(

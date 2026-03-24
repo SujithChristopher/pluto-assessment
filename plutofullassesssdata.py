@@ -304,6 +304,9 @@ class PlutoAssessmentProtocolData(object):
     @property
     def mech_enabled(self) -> list[str]:
         """Get the list of mechanisms that are to be enabled."""
+        import debugconfig
+        if debugconfig.DEBUG:
+            return list(pfadef.MECHANISMS)
         if self._df is None:
             return []
         if self._index is None:

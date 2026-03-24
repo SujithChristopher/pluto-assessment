@@ -106,8 +106,9 @@ MECH_TASKS = {
     "WURD": [["AROM", "PROM", "APROMSLOW", "APROMFAST", "DISC"], []],
     "HOC": [
         ["AROM", "PROM", "APROMSLOW", "APROMFAST"],
-        ["PROP"],
-        ["FCTRLLOW", "FCTRLMED", "FCTRLHIGH"],
+        ['DISC']
+        # ["PROP"],
+        # ["FCTRLLOW", "FCTRLMED", "FCTRLHIGH"],
     ],
 }
 TASK_DEPENDENCIES = {
