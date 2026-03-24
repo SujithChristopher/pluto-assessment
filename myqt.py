@@ -124,6 +124,47 @@ class CommentDialog(QDialog):
             super().reject()
 
 
+class MechStartDialog(QDialog):
+    """Confirm dialog shown before starting a mechanism assessment.
+    Displays the mechanism image above the confirmation text."""
+
+    def __init__(self, parent=None, mech_name="", img_path=""):
+        super().__init__(parent)
+        self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.CustomizeWindowHint)
+        self.setWindowTitle("Confirm")
+
+        font = QtGui.QFont()
+        font.setFamily("Cascadia Mono Light")
+        font.setPointSize(9)
+        self.setFont(font)
+
+        # Image
+        self._img_label = QLabel(self)
+        self._img_label.setAlignment(QtCore.Qt.AlignCenter)
+        pixmap = QtGui.QPixmap(str(img_path))
+        if not pixmap.isNull():
+            self._img_label.setPixmap(
+                pixmap.scaled(200, 200, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+            )
+
+        # Text
+        self._txt_label = QLabel(f"Start {mech_name} assessment?", self)
+        self._txt_label.setAlignment(QtCore.Qt.AlignCenter)
+
+        # Buttons
+        self._buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self
+        )
+        self._buttons.accepted.connect(self.accept)
+        self._buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self._img_label)
+        layout.addWidget(self._txt_label)
+        layout.addWidget(self._buttons)
+        self.adjustSize()
+
+
 class MechTaskSkipDialog(QDialog):
     def __init__(self, parent=None, label="Commemnt: "):
         super().__init__(parent)

@@ -36,7 +36,7 @@ from plutoapromwindow import PlutoAPRomAssessWindow
 from plutoromwindow import PlutoRomAssessWindow
 from plutopropassesswindow import PlutoPropAssessWindow
 from plutoforcecontrolwindow import PlutoForceControlWindow
-from myqt import MechTaskSkipDialog
+from myqt import MechStartDialog, MechTaskSkipDialog
 from uipy.ui_plutofullassessment import Ui_PlutoFullAssessor
 
 import plutodefs as pdef
@@ -764,14 +764,16 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self.update_ui()
 
     def _callback_start_mech_assess(self, mech_chosen):
-        # Message box to inform the user that the mechanism is selected.
-        reply = QMessageBox.question(
-            self,
-            "Confirm",
-            f"Start {mech_chosen} assessment?\n\n",
-            QMessageBox.Ok | QMessageBox.Cancel,
-        )
-        if reply == QMessageBox.Cancel:
+        # Dialog to confirm mechanism selection, with image.
+        _img_map = {
+            "WFE": "wfe.png",
+            "WURD": "wfe.png",
+            "FPS": "fps.png",
+            "HOC": "hoc.png",
+        }
+        _imgpath = pathlib.Path(__file__).parent / "assets" / _img_map[mech_chosen]
+        _dlg = MechStartDialog(self, mech_name=mech_chosen, img_path=_imgpath)
+        if _dlg.exec() != QtWidgets.QDialog.Accepted:
             # Cancel the radio button selection.
             self._reset_mech_selection()
         # Run the state machine.
