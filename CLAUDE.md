@@ -36,6 +36,16 @@ uv run pyside6-uic ui/<filename>.ui -o uipy/ui_<name>.py
 uv run python -m py_compile <file1.py> [file2.py ...]
 ```
 
+## Building a Standalone Executable
+
+A PyInstaller spec file (`plutofullassessment.spec`) is present. Build with:
+
+```bash
+uv run pyinstaller plutofullassessment.spec
+```
+
+Output goes to `dist/plutofullassessment.exe`.
+
 ## Architecture
 
 ### Hardware Communication Layer
@@ -102,6 +112,7 @@ PLUTO hardware (serial 115200 baud)
 
 ## Key Conventions
 
+- **`debugconfig.py`** — Set `DEBUG = True` to bypass sequential assessment ordering (all mechanisms and tasks become selectable in any order). Set `False` to restore normal behavior. Use for debugging only; do not ship with `DEBUG = True`.
 - The `QtPluto` object is created once in the main window and passed to all sub-windows; sub-windows must not create their own serial connections.
 - Task constants (trial counts, timing, thresholds) live as class attributes on the classes in `plutofullassessdef.py` (e.g., `AROM.NO_OF_TRIALS`, `Proprioception.TGT_POSITIONS`). Use `get_task_constants(task_name)` to retrieve them by string name.
 - `pdef.get_name(dict, code)` and `pdef.get_code(dict, name)` are the lookups for converting between device codes and string names — use these instead of direct dict access.
