@@ -114,10 +114,14 @@ class DiscreteReachData(object):
 
     @property
     def target1(self):
+        if self.mechanism == "HOC":
+            return 0.0  # home/center = relaxing position
         return DiscreteReach.TGT1_POSITION * self.aromrange + self.arom[0]
 
     @property
     def target2(self):
+        if self.mechanism == "HOC":
+            return DiscreteReach.TGT2_POSITION * self.arom[1]
         return DiscreteReach.TGT2_POSITION * self.aromrange + self.arom[0]
 
     @property
@@ -656,7 +660,11 @@ class PlutoAPRomAssessmentStateMachine:
     #
     def subj_in_target1(self):
         """Check if the subject is in target1."""
-        # print(self._pluto.angle, self._data.target1, )
+        if self._data.mechanism == "HOC":
+            return (
+                np.abs(self._pluto.hocdisp - np.abs(self._data.target1))
+                < 0.5 * DiscreteReach.TGT_WIDTH * self._data.aromrange
+            )
         return (
             np.abs(self._pluto.angle - self._data.target1)
             < 0.5 * DiscreteReach.TGT_WIDTH * self._data.aromrange
@@ -664,6 +672,11 @@ class PlutoAPRomAssessmentStateMachine:
 
     def subj_in_target2(self):
         """Check if the subject is in target2."""
+        if self._data.mechanism == "HOC":
+            return (
+                np.abs(self._pluto.hocdisp - self._data.target2)
+                < 0.5 * DiscreteReach.TGT_WIDTH * self._data.aromrange
+            )
         return (
             np.abs(self._pluto.angle - self._data.target2)
             < 0.5 * DiscreteReach.TGT_WIDTH * self._data.aromrange
@@ -863,41 +876,48 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
             # Hide both targets.
             self.ui.tgt1.setBrush(DiscreteReach.HIDE_COLOR)
             self.ui.tgt2.setBrush(DiscreteReach.HIDE_COLOR)
+            self.ui.tgt2_mirror.setBrush(DiscreteReach.HIDE_COLOR)
         elif self._smachine.state == States.GET_TO_TARGET1_START:
             # Show Target 1
             self.ui.tgt1.setBrush(DiscreteReach.START_WAIT_COLOR)
-            # self.ui.tgt2.setBrush(DiscreteReach.HIDE_COLOR)
         elif self._smachine.state == States.HOLDING_AT_TARGET1_START:
             # Show Target 1
             self.ui.tgt1.setBrush(DiscreteReach.START_HOLD_COLOR)
-            # self.ui.tgt2.setBrush(DiscreteReach.HIDE_COLOR)
         elif self._smachine.state == States.WAIT_TO_START_REACH_TO_TARGET2:
             # Show Target 2
             self.ui.tgt1.setBrush(DiscreteReach.START_HOLD_COLOR)
             self.ui.tgt2.setBrush(DiscreteReach.TARGET_DISPLAY_COLOR)
+            self.ui.tgt2_mirror.setBrush(DiscreteReach.TARGET_DISPLAY_COLOR)
         elif self._smachine.state == States.MOVING_TO_TARGET2:
             # Hide Target 1.
             self.ui.tgt1.setBrush(DiscreteReach.HIDE_COLOR)
             self.ui.tgt2.setBrush(DiscreteReach.TARGET_DISPLAY_COLOR)
+            self.ui.tgt2_mirror.setBrush(DiscreteReach.TARGET_DISPLAY_COLOR)
         elif self._smachine.state == States.HOLDING_AT_TARGET2_STOP:
             # Highlight target 2.
             self.ui.tgt2.setBrush(DiscreteReach.TARGET_REACHED_COLOR)
+            self.ui.tgt2_mirror.setBrush(DiscreteReach.TARGET_REACHED_COLOR)
         elif self._smachine.state == States.TGT1_TO_TGT2_DONE:
             # Hide both targets.
             self.ui.tgt2.setBrush(DiscreteReach.START_WAIT_COLOR)
+            self.ui.tgt2_mirror.setBrush(DiscreteReach.START_WAIT_COLOR)
         elif self._smachine.state == States.GET_TO_TARGET2_START:
             # Show Target 2
             self.ui.tgt2.setBrush(DiscreteReach.START_WAIT_COLOR)
+            self.ui.tgt2_mirror.setBrush(DiscreteReach.START_WAIT_COLOR)
         elif self._smachine.state == States.HOLDING_AT_TARGET2_START:
             # Show Target 2
             self.ui.tgt2.setBrush(DiscreteReach.START_HOLD_COLOR)
+            self.ui.tgt2_mirror.setBrush(DiscreteReach.START_HOLD_COLOR)
         elif self._smachine.state == States.WAIT_TO_START_REACH_TO_TARGET1:
             # Show Target 1
             self.ui.tgt2.setBrush(DiscreteReach.START_HOLD_COLOR)
+            self.ui.tgt2_mirror.setBrush(DiscreteReach.START_HOLD_COLOR)
             self.ui.tgt1.setBrush(DiscreteReach.TARGET_DISPLAY_COLOR)
         elif self._smachine.state == States.MOVING_TO_TARGET1:
             # Hide Target 2.
             self.ui.tgt2.setBrush(DiscreteReach.HIDE_COLOR)
+            self.ui.tgt2_mirror.setBrush(DiscreteReach.HIDE_COLOR)
             self.ui.tgt1.setBrush(DiscreteReach.TARGET_DISPLAY_COLOR)
         elif self._smachine.state == States.HOLDING_AT_TARGET1_STOP:
             # Highlight target 1.
@@ -922,7 +942,11 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
         _aromdisp = list(map(lambda x: self._dispsign * x, self.data.arom))
         _aromdisp.sort()
         _pgobj.setYRange(-30, 30)
-        _pgobj.setXRange(_aromdisp[0], _aromdisp[1])
+        if self.data.mechanism == "HOC":
+            _arom_max = max(abs(self.data.arom[0]), abs(self.data.arom[1]))
+            _pgobj.setXRange(-_arom_max, _arom_max)
+        else:
+            _pgobj.setXRange(_aromdisp[0], _aromdisp[1])
         _pgobj.getAxis("bottom").setStyle(showValues=False)
         _pgobj.getAxis("left").setStyle(showValues=False)
 
@@ -952,6 +976,20 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
         )
         _pgobj.addItem(self.ui.tgt2)
 
+        # Target2 mirror box (HOC only — symmetric left-side reach target)
+        self.ui.tgt2_mirror = QGraphicsRectItem()
+        self.ui.tgt2_mirror.setBrush(DiscreteReach.HIDE_COLOR)
+        self.ui.tgt2_mirror.setPen(pg.mkPen(None))
+        if self.data.mechanism == "HOC":
+            self.ui.tgt2_mirror.setRect(
+                -self.data.target2
+                - 0.5 * DiscreteReach.TGT_WIDTH * self.data.aromrange,
+                DiscreteReach.CURSOR_LOWER_LIMIT,
+                DiscreteReach.TGT_WIDTH * self.data.aromrange,
+                DiscreteReach.CURSOR_UPPER_LIMIT - DiscreteReach.CURSOR_LOWER_LIMIT,
+            )
+        _pgobj.addItem(self.ui.tgt2_mirror)
+
         # Current position lines
         self.ui.currPosLine1 = pg.PlotDataItem(
             [0, 0],
@@ -967,18 +1005,15 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
         _pgobj.addItem(self.ui.currPosLine2)
 
         # Instruction text
+        _text_x = 0 if self.data.mechanism == "HOC" else _aromdisp[0] + 0.5 * self.data.aromrange
         self.ui.subjInst = pg.TextItem(text="", color="w", anchor=(0.5, 0.5))
-        self.ui.subjInst.setPos(
-            _aromdisp[0] + 0.5 * self.data.aromrange, 25
-        )  # Set position (x, y)
+        self.ui.subjInst.setPos(_text_x, 25)  # Set position (x, y)
         self.ui.subjInst.setFont(QtGui.QFont("Cascadia Mono", 12))
         _pgobj.addItem(self.ui.subjInst)
 
         # Timer text
         self.ui.timerText = pg.TextItem(text="", color="w", anchor=(0.5, 0.5))
-        self.ui.timerText.setPos(
-            _aromdisp[0] + 0.5 * self.data.aromrange, 15
-        )  # Set position (x, y)
+        self.ui.timerText.setPos(_text_x, 15)  # Set position (x, y)
         self.ui.timerText.setFont(QtGui.QFont("Cascadia Mono", 10))
         _pgobj.addItem(self.ui.timerText)
 
