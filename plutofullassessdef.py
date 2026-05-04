@@ -19,7 +19,7 @@ from PySide6.QtGui import QColor
 # PLUTO COM Port
 #
 PLUTOCOMM = "COM19" # Sujith system
-PLUTOCOMM = "COM8"
+# PLUTOCOMM = "COM8"
 
 
 class ROMType(Enum):
