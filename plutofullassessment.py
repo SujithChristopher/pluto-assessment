@@ -219,7 +219,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             self.statusBar().showMessage("Limb set. Select a time point.")
 
     def _populate_timepoint_combobox(self):
-        """Populate cbTimePoint, disabling any already-completed time points."""
+        """Populate cbTimePoint, disabling completed and out-of-order time points."""
         model = self.cbTimePoint.model()
         first_available = 0
         for i, tp in enumerate(pfadef.TIMEPOINTS):
@@ -229,7 +229,11 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             if item is None:
                 continue
             completed = self.data.is_timepoint_completed(self.data.limb, tp)
-            if completed:
+            prior_done = all(
+                self.data.is_timepoint_completed(self.data.limb, pfadef.TIMEPOINTS[j])
+                for j in range(i)
+            )
+            if completed or not prior_done:
                 item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEnabled)
             else:
                 item.setFlags(item.flags() | QtCore.Qt.ItemIsEnabled)
@@ -242,6 +246,16 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         tp = self.cbTimePoint.currentText()
         if not tp:
             return
+        tp_index = pfadef.TIMEPOINTS.index(tp) if tp in pfadef.TIMEPOINTS else -1
+        if tp_index > 0:
+            prev_tp = pfadef.TIMEPOINTS[tp_index - 1]
+            if not self.data.is_timepoint_completed(self.data.limb, prev_tp):
+                QMessageBox.warning(
+                    self,
+                    "Timepoint Order Error",
+                    f"Cannot select {tp}: {prev_tp} has not been completed yet.",
+                )
+                return
         reply = QMessageBox.question(
             self,
             "Confirm",
