@@ -65,19 +65,15 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         super(PlutoFullAssesor, self).__init__(*args, **kwargs)
         self.setupUi(self)
 
-        # Fix UI accessibility - remove fixed size constraints that cause clipping
-        # Keep minimum size for usability, but allow resizing
-        self.setMinimumSize(1280, 720)
-        self.setMaximumSize(16777215, 16777215)  # Reset to default max
+        # UI file locks window to 1200x607 — clear both constraints before maximizing
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(16777215, 16777215)
+        self.lblSubjDetails.setMaximumSize(16777215, 16777215)
+        self.showMaximized()
 
         self._flag = False
         self._subjdetails = ""
         self._title = "Pluto Full Assessment"
-
-        # Move close to top left corner and set initial size
-        self.move(50, 100)
-        # Resize to a reasonable default that fits most screens
-        self.resize(1500, 860)
 
         # PLUTO COM
         self.pluto: QtPluto = QtPluto(port)

@@ -413,13 +413,10 @@ class PlutoPositionHoldAssessWindow(QtWidgets.QMainWindow):
         self.ui = Ui_PosHoldAssessWindow()
         self.ui.setupUi(self)
 
-        # Fix UI accessibility - remove fixed size constraints
-        self.setMinimumSize(522, 451)
-        self.setMaximumSize(16777215, 16777215)
-        _screen = QtWidgets.QApplication.primaryScreen().geometry()
-        _pad = int(_screen.width() * 0.05)
-        self.resize(_screen.width() - 2 * _pad, 550)
-        self.move(_pad, self.y())
+        # Remove hocGraph fixed size so it expands with the window
+        self.ui.hocGraph.setMaximumSize(16777215, 16777215)
+
+        self.showFullScreen()
 
         if modal:
             self.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)

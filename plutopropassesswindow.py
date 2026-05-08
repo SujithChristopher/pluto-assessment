@@ -687,13 +687,12 @@ class PlutoPropAssessWindow(QtWidgets.QMainWindow):
         self.ui = Ui_APRomAssessWindow()
         self.ui.setupUi(self)
 
-        # Fix UI accessibility - remove fixed size constraints
-        self.setMinimumSize(751, 429)
-        self.setMaximumSize(16777215, 16777215)
-        _screen = QtWidgets.QApplication.primaryScreen().geometry()
-        _pad = int(_screen.width() * 0.05)
-        self.resize(_screen.width() - 2 * _pad, 550)
-        self.move(_pad, self.y())
+        # Make layout responsive to window size
+        _rlayout = QtWidgets.QVBoxLayout(self.ui.centralwidget)
+        _rlayout.setContentsMargins(10, 10, 10, 10)
+        _rlayout.addWidget(self.ui.verticalLayoutWidget)
+
+        self.showFullScreen()
 
         if modal:
             self.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
