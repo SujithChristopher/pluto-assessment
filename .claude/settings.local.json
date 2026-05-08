@@ -30,7 +30,9 @@
       "Bash(grep -E \"\\\\.py$\")",
       "Bash(conda run:*)",
       "Bash(uv run:*)",
-      "Bash(grep -rn \"pluto\\\\.gripforce\" *.py)"
+      "Bash(grep -rn \"pluto\\\\.gripforce\" *.py)",
+      "Bash(Get-ChildItem E:\\\\homer\\\\pluto-assessment\\\\pluto*window.py -File)",
+      "Bash(Select-Object Name)"
     ]
   }
 }

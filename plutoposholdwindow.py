@@ -416,7 +416,10 @@ class PlutoPositionHoldAssessWindow(QtWidgets.QMainWindow):
         # Fix UI accessibility - remove fixed size constraints
         self.setMinimumSize(522, 451)
         self.setMaximumSize(16777215, 16777215)
-        self.resize(700, 550)
+        _screen = QtWidgets.QApplication.primaryScreen().geometry()
+        _pad = int(_screen.width() * 0.05)
+        self.resize(_screen.width() - 2 * _pad, 550)
+        self.move(_pad, self.y())
 
         if modal:
             self.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
