@@ -742,7 +742,7 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
         _rlayout.setContentsMargins(10, 10, 10, 10)
         _rlayout.addWidget(self.ui.verticalLayoutWidget)
 
-        self.showFullScreen()
+        self.showMaximized()
 
         if modal:
             self.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)

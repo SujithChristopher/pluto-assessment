@@ -416,7 +416,7 @@ class PlutoPositionHoldAssessWindow(QtWidgets.QMainWindow):
         # Remove hocGraph fixed size so it expands with the window
         self.ui.hocGraph.setMaximumSize(16777215, 16777215)
 
-        self.showFullScreen()
+        self.showMaximized()
 
         if modal:
             self.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)

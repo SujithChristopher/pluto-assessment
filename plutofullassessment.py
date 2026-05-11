@@ -988,6 +988,21 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             else Events.AROM_NO_DONE,
             data,
         )
+        # Auto-skip DISC if AROM range is below the movement threshold.
+        if task_completed and data["done"] and "DISC" in self.data.protocol.task_not_completed:
+            _arom = self.data.detailedsummary.get_arom()
+            _arom_range = abs(_arom[1] - _arom[0])
+            _mech = self.data.protocol.mech
+            _threshold = 2.0 if _mech == "HOC" else 10.0
+            _unit = "cm" if _mech == "HOC" else "deg"
+            if _arom_range < _threshold:
+                self._smachine.run_statemachine(
+                    Events.DISCREACH_SKIP,
+                    {
+                        "comment": f"AROM {_arom_range:.2f}{_unit} below {_threshold}{_unit} threshold",
+                        "session": self.data.session,
+                    },
+                )
         # Reenable main controls
         self._maindisable = False
         # Update the Table.

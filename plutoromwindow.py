@@ -144,7 +144,7 @@ class PlutoRomAssessWindow(QtWidgets.QMainWindow):
         self.ui.textInstruction.setMinimumWidth(0)
         self.ui.textInstruction.setMaximumWidth(16777215)
 
-        self.showFullScreen()
+        self.showMaximized()
 
         if modal:
             self.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
