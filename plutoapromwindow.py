@@ -473,6 +473,9 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         if modal:
             self.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
 
+        # Skip AROM flag
+        self._arom_skipped = False
+
         # PLUTO device
         self._pluto = plutodev
         self._pluto.send_heartbeat()
@@ -500,6 +503,13 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
 
         # Attach callbacks
         self._attach_pluto_callbacks()
+
+        # Skip AROM button (ACTIVE romtype only)
+        if self.data.romtype == pfadef.ROMType.ACTIVE:
+            self.ui.pbSkipArom = QtWidgets.QPushButton("Skip AROM")
+            self.ui.pbSkipArom.setStyleSheet("color: rgb(200, 100, 0);")
+            self.ui.horizontalLayout.addWidget(self.ui.pbSkipArom)
+            self.ui.pbSkipArom.clicked.connect(self._callback_skip_arom_clicked)
 
         # Attach control callbacks
         self.ui.cbTrialRun.clicked.connect(self._callback_trialrun_clicked)
@@ -544,6 +554,12 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
 
         # Update status message
         self.ui.lblStatus.setText(f"{self._smachine.state}")
+
+        # Skip AROM button state
+        if hasattr(self.ui, "pbSkipArom"):
+            self.ui.pbSkipArom.setEnabled(
+                self._smachine.state == States.REST and not self.data.all_trials_done
+            )
 
         # Close if needed
         if self._smachine.state == States.DONE:
@@ -905,7 +921,31 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             # Restart ROM assessment statemachine
             self._smachine.reset_statemachine()
 
+    def _callback_skip_arom_clicked(self):
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Skip AROM",
+            "Skip AROM assessment?\nDiscrete reaching will be disabled for this mechanism.",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+        )
+        if reply == QtWidgets.QMessageBox.Yes:
+            self._arom_skipped = True
+            self.close()
+
     def closeEvent(self, event):
+        # Skip AROM was requested — bypass normal dialogs.
+        if self._arom_skipped:
+            data = {
+                "romval": self.data.rom,
+                "done": False,
+                "status": pfadef.AssessStatus.SKIPPED.value,
+                "taskcomment": "Skipped by assessor from ROM assessment window",
+            }
+            if self.on_close_callback:
+                self.on_close_callback(data=data)
+            self._detach_pluto_callbacks()
+            return super().closeEvent(event)
+
         # Get comment from the experimenter.
         data = {"romval": self.data.rom, "done": self.data.all_trials_done}
         if self.data.all_trials_done:

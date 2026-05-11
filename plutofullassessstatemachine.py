@@ -436,6 +436,8 @@ class PlutoFullAssessmentStateMachine:
                 else States.TASK_SELECT
             )
             self.log(f"AROM not done for {self._data.protocol.mech}.")
+        elif event == Events.AROM_SKIP:
+            self._handle_task_skip_event(event, data)
 
     def _handle_prom_assess(self, event, data):
         """ """

@@ -980,6 +980,20 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             self._romwnd = None
             return
         # Window not closed.
+        # Handle assessor-initiated AROM skip.
+        if data.get("status") == pfadef.AssessStatus.SKIPPED.value:
+            self._smachine.run_statemachine(
+                Events.AROM_SKIP,
+                {
+                    "session": self.data.session,
+                    "comment": data.get("taskcomment", "Skipped by assessor"),
+                },
+            )
+            self._maindisable = False
+            self._updatetable = True
+            self._currwndclosed = True
+            self.update_ui()
+            return
         # Run the state machine.
         task_completed = data["status"] == pfadef.AssessStatus.COMPLETE.value
         self._smachine.run_statemachine(
