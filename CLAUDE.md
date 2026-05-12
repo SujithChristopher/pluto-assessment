@@ -24,7 +24,13 @@ The project uses `uv` for package management (not conda/pip). A `.venv` is prese
 
 ## Regenerating UI Python Files
 
-Qt `.ui` files live in `ui/`. Their generated Python counterparts live in `uipy/`. After editing a `.ui` file in Qt Designer, regenerate with:
+Qt `.ui` files live in `ui/`. Their generated Python counterparts live in `uipy/`. After editing a `.ui` file in Qt Designer, regenerate all at once:
+
+```bash
+genpycode.bat
+```
+
+Or regenerate a single file:
 
 ```bash
 uv run pyside6-uic ui/<filename>.ui -o uipy/ui_<name>.py
@@ -62,6 +68,7 @@ Output goes to `dist/plutofullassessment.exe`.
   - `PlutoCalibrationStateMachine` — device calibration steps
   - `PlutoRomAssessmentStateMachine` — AROM/PROM recording
   - `PlutoPropAssessmentStateMachine` — proprioception haptic display + response
+  - Note: APROM, PositionHold, DiscreteReach, and ForceControl task flow is controlled inline within `PlutoFullAssessmentStateMachine` — they do not have separate state machine classes.
 
 ### Assessment Protocol Definitions
 - **`plutofullassessdef.py`** — Protocol constants for the full assessment: which mechanisms (`FPS`, `WFE`, `HOC`), which tasks per mechanism (`AROM`, `PROM`, `APROMSLOW`, `APROMFAST`, `DISC`, `POSHOLD`, `PROP`, `FCTRLLOW/MED/HIGH`), task ordering rules, task dependency rules (subject type: `stroke` vs `healthy`), and per-task data column headers. Also contains constants classes (`AROM`, `PROM`, `APROM`, `PositionHold`, `DiscreteReach`, `Proprioception`, `ForceControl`) with trial counts, target positions, timing, and display colors.
@@ -89,6 +96,9 @@ Each file follows the pattern `pluto<taskname>window.py` and implements a `QMain
 - **`misc.py`** — `CSVBufferWriter`: Buffered CSV writer used by all task windows to log raw sensor data; flushes on a time interval or when buffer fills.
 - **`async_workers.py`** — `LimbSetupWorker(QThread)`: Offloads blocking file I/O (folder creation, JSON writing, protocol CSV init) when setting up a timepoint session.
 
+### Custom Widgets
+- **`myqt.py`** — Shared PySide6 dialog/widget classes used across task windows: `CommentDialog` (operator notes), `MechStartDialog` (mechanism intro), `MechTaskSkipDialog` (skip confirmation), and `create_sector` (pyqtgraph arc helper).
+
 ### Subject Management
 - **`subjectcreator.py`** / **`subjectselector.py`** — QDialog subclasses for creating new subject records and selecting existing ones from the subject list CSV.
 
@@ -112,7 +122,7 @@ PLUTO hardware (serial 115200 baud)
 
 ## Key Conventions
 
-- **`debugconfig.py`** — Set `DEBUG = True` to bypass sequential assessment ordering (all mechanisms and tasks become selectable in any order). Set `False` to restore normal behavior. Use for debugging only; do not ship with `DEBUG = True`.
+- **`debugconfig.py`** — Set `DEBUG = True` to bypass sequential assessment ordering (all mechanisms and tasks become selectable in any order). Set `False` to restore normal behavior. Use for debugging only; do not ship with `DEBUG = True`. **Current repo state: `DEBUG = True`** — always verify before building a release.
 - The `QtPluto` object is created once in the main window and passed to all sub-windows; sub-windows must not create their own serial connections.
 - Task constants (trial counts, timing, thresholds) live as class attributes on the classes in `plutofullassessdef.py` (e.g., `AROM.NO_OF_TRIALS`, `Proprioception.TGT_POSITIONS`). Use `get_task_constants(task_name)` to retrieve them by string name.
 - `pdef.get_name(dict, code)` and `pdef.get_code(dict, name)` are the lookups for converting between device codes and string names — use these instead of direct dict access.
