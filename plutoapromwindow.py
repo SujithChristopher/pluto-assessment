@@ -558,7 +558,8 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         # Skip AROM button state
         if hasattr(self.ui, "pbSkipArom"):
             self.ui.pbSkipArom.setEnabled(
-                self._smachine.state == States.REST and not self.data.all_trials_done
+                self._smachine.state in (States.REST, States.WAIT_TO_MOVE)
+                and not self.data.all_trials_done
             )
 
         # Close if needed
