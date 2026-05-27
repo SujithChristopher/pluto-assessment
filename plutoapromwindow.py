@@ -269,7 +269,9 @@ class APRomData(object):
         else:
             return False
 
-        if self._display_min != float('inf') and self._display_max != float('-inf'):
+        if self._last_cycle_left is not None and self._last_cycle_right is not None:
+            self._trialrom = [self._last_cycle_left, self._last_cycle_right]
+        elif self._display_min != float('inf') and self._display_max != float('-inf'):
             self._trialrom = [self._display_min, self._display_max]
 
         if self._dir != 0 and new_dir != self._dir:
@@ -449,7 +451,7 @@ class PlutoAPRomAssessmentStateMachine:
 
     def _handle_wait_to_move(self, event, dt):
         if self._is_arom_cycling:
-            self._instruction = "Start cycling through your full range!"
+            self._instruction = "Move LEFT ◄ first, then cycle back and forth"
             if event == pdef.PlutoEvents.NEWDATA:
                 if not self.subj_is_holding():
                     self._state = States.CYCLING
@@ -712,6 +714,14 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
 
     def _update_visual_feedabck(self):
         self._update_current_position_cursor()
+        _show_arrow = (
+            self.ui.dirIndicator is not None
+            and self._smachine.state == States.WAIT_TO_MOVE
+            and self._smachine._is_arom_cycling
+            and self.data._currtrial == 0
+        )
+        if self.ui.dirIndicator is not None:
+            self.ui.dirIndicator.setVisible(_show_arrow)
         if self._smachine.state in (States.CYCLING, States.WAIT_FOR_REST):
             self._update_arom_cursor_position()
             self._update_rest_pos_line()
@@ -720,7 +730,6 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self._highlight_start_zone()
             self._update_arom_cursor_position()
         elif self._smachine.state == States.REST:
-            # Reset arom cursor position.
             self._reset_display()
 
     def _update_current_position_cursor(self):
@@ -905,6 +914,9 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.ui.restPosLine.setData(
                 [0, 0], [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
             )
+        # Hide direction indicator
+        if self.ui.dirIndicator is not None:
+            self.ui.dirIndicator.setVisible(False)
 
     #
     # Graph plot initialization
@@ -922,8 +934,9 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         else:
             _range = pdef.get_range_for_mechanism(self.data.mechanism)
             _pgobj.setXRange(_range[0], _range[1])
-        _pgobj.getAxis("bottom").setStyle(showValues=False)
-        _pgobj.getAxis("left").setStyle(showValues=False)
+        _pgobj.hideAxis("bottom")
+        _pgobj.hideAxis("left")
+        _pgobj.showGrid(x=False, y=False)
 
         # Current position lines
         self.ui.currPosLine1 = pg.PlotDataItem(
@@ -989,8 +1002,17 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 pen=pg.mkPen(color="#00FFFF", width=3),
             )
             _pgobj.addItem(self.ui.restPosLine)
+            # Direction indicator — shown once at first trial WAIT_TO_MOVE
+            self.ui.dirIndicator = pg.TextItem(
+                text="◄ Move LEFT first", color="#FFFF00", anchor=(0.5, 0.5)
+            )
+            self.ui.dirIndicator.setPos(0, 0)
+            self.ui.dirIndicator.setFont(QtGui.QFont("Cascadia Mono Light", 20))
+            self.ui.dirIndicator.setVisible(False)
+            _pgobj.addItem(self.ui.dirIndicator)
         else:
             self.ui.restPosLine = None
+            self.ui.dirIndicator = None
 
         # Angle display sign for the limb.
         self._dispsign = 1.0
