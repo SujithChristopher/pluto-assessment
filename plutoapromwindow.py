@@ -69,8 +69,10 @@ class APRomData(object):
         self._last_cycle_right = None     # right extreme of last completed cycle
         self._cycles_completed = 0
         self._rest_position = None
-        self._display_min = float('inf')  # drives _trialrom for live display
+        self._display_min = float('inf')
         self._display_max = float('-inf')
+        self._disp_left = None   # live left boundary for display
+        self._disp_right = None  # live right boundary for display
         # Logging variables
         self._logstate: RawDataLoggingState = RawDataLoggingState.WAIT_FOR_LOG
         self._rawfilewriter: misc.CSVBufferWriter = misc.CSVBufferWriter(
@@ -186,6 +188,8 @@ class APRomData(object):
             self._rest_position = None
             self._display_min = float('inf')
             self._display_max = float('-inf')
+            self._disp_left = None
+            self._disp_right = None
 
     def add_newdata(self, dt, pos):
         """Add new data to the trial data."""
@@ -251,29 +255,43 @@ class APRomData(object):
                 and self._trialrom[-1] - self._startpos > _th
             )
 
-    def update_cycling_data(self, pos) -> bool:
-        """Update left/right directional extremes. Returns True when a full cycle completes."""
-        if not self._trialdata["vel"]:
+    def update_cycling_data(self) -> bool:
+        """Update left/right directional extremes using smoothed position (Option A).
+        Returns True when a full cycle completes."""
+        if not self._trialdata["vel"] or not self._trialdata["pos"]:
             return False
         vel_mean = float(np.mean(self._trialdata["vel"]))
+        mean_pos = float(np.mean(self._trialdata["pos"]))
         _vth = AROM.VEL_NOT_HOC_THRESHOLD
 
         if vel_mean < -_vth:
             new_dir = -1
-            self._running_left = min(self._running_left, pos)
-            self._display_min = min(self._display_min, pos)
+            self._running_left = min(self._running_left, mean_pos)
+            self._display_min = min(self._display_min, mean_pos)
         elif vel_mean > _vth:
             new_dir = +1
-            self._running_right = max(self._running_right, pos)
-            self._display_max = max(self._display_max, pos)
+            self._running_right = max(self._running_right, mean_pos)
+            self._display_max = max(self._display_max, mean_pos)
         else:
             return False
 
-        if self._last_cycle_left is not None and self._last_cycle_right is not None:
-            self._trialrom = [self._last_cycle_left, self._last_cycle_right]
-        elif self._display_min != float('inf') and self._display_max != float('-inf'):
-            self._trialrom = [self._display_min, self._display_max]
+        # Live left boundary: running extreme while moving left, else last confirmed
+        if self._dir == -1 and self._running_left != float('inf'):
+            self._disp_left = self._running_left
+        elif self._cycle_left is not None:
+            self._disp_left = self._cycle_left
+        elif self._last_cycle_left is not None:
+            self._disp_left = self._last_cycle_left
 
+        # Live right boundary: running extreme while moving right, else last confirmed
+        if self._dir == +1 and self._running_right != float('-inf'):
+            self._disp_right = self._running_right
+        elif self._cycle_right is not None:
+            self._disp_right = self._cycle_right
+        elif self._last_cycle_right is not None:
+            self._disp_right = self._last_cycle_right
+
+        # Direction reversal
         if self._dir != 0 and new_dir != self._dir:
             if self._dir == -1:
                 self._cycle_left = self._running_left
@@ -511,7 +529,7 @@ class PlutoAPRomAssessmentStateMachine:
     def _handle_cycling(self, event, dt):
         if event != pdef.PlutoEvents.NEWDATA:
             return
-        self._data.update_cycling_data(self._pluto.angle)
+        self._data.update_cycling_data()
         n = self._data._cycles_completed
         self._instruction = f"Keep cycling! {n}/{AROM.NO_OF_CYCLES} cycles done"
         if self._data.cycles_done:
@@ -789,8 +807,6 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             )
 
     def _update_arom_cursor_position(self):
-        if len(self.data._trialrom) == 0:
-            return
         if self.data.mechanism == "HOC":
             if len(self.data._trialrom) > 1:
                 self.ui.romLine1.setData(
@@ -807,37 +823,53 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                     2 * self.data._trialrom[-1],
                     AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT,
                 )
-            else:
+            return
+
+        # AROM cycling: draw left/right independently from _disp_left/_disp_right
+        if self._smachine._is_arom_cycling:
+            _dl = self.data._disp_left
+            _dr = self.data._disp_right
+            if _dl is not None:
                 self.ui.romLine1.setData(
-                    [0, 0], [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
+                    [self._dispsign * _dl, self._dispsign * _dl],
+                    [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
                 )
+            else:
+                self.ui.romLine1.setData([], [])
+            if _dr is not None:
                 self.ui.romLine2.setData(
-                    [0, 0], [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
+                    [self._dispsign * _dr, self._dispsign * _dr],
+                    [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
                 )
+            else:
+                self.ui.romLine2.setData([], [])
+            if _dl is not None and _dr is not None:
+                _l = self._dispsign * min(_dl, _dr)
+                _r = self._dispsign * max(_dl, _dr)
                 self.ui.romFill.setRect(
-                    0,
-                    AROM.CURSOR_LOWER_LIMIT,
-                    0,
-                    AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT,
+                    _l, AROM.CURSOR_LOWER_LIMIT,
+                    _r - _l, AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT,
                 )
-        else:
-            _romdisp = list(map(lambda x: self._dispsign * x, self.data._trialrom))
-            _romdisp.sort()
-            self.ui.romLine1.setData(
-                [_romdisp[0], _romdisp[0]],
-                [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
-            )
-            self.ui.romLine2.setData(
-                [_romdisp[-1], _romdisp[-1]],
-                [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
-            )
-            # Fill between the two AROM lines
-            self.ui.romFill.setRect(
-                _romdisp[0],
-                AROM.CURSOR_LOWER_LIMIT,
-                (_romdisp[-1] - _romdisp[0]),
-                AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT,
-            )
+            return
+
+        # PROM / HOC fallback
+        if len(self.data._trialrom) == 0:
+            return
+        _romdisp = sorted(self._dispsign * x for x in self.data._trialrom)
+        self.ui.romLine1.setData(
+            [_romdisp[0], _romdisp[0]],
+            [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
+        )
+        self.ui.romLine2.setData(
+            [_romdisp[-1], _romdisp[-1]],
+            [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
+        )
+        self.ui.romFill.setRect(
+            _romdisp[0],
+            AROM.CURSOR_LOWER_LIMIT,
+            _romdisp[-1] - _romdisp[0],
+            AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT,
+        )
 
     def _highlight_start_zone(self):
         if len(self.data._trialrom) == 0:
@@ -881,12 +913,8 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
 
     def _reset_display(self):
         # Reset ROM display
-        self.ui.romLine1.setData(
-            [0, 0], [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
-        )
-        self.ui.romLine2.setData(
-            [0, 0], [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
-        )
+        self.ui.romLine1.setData([], [])
+        self.ui.romLine2.setData([], [])
         # Fill between the two AROM lines
         self.ui.romFill.setRect(
             0,
@@ -895,12 +923,8 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT,
         )
         # Reset stop zone.
-        self.ui.stopLine1.setData(
-            [0, 0], [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
-        )
-        self.ui.stopLine2.setData(
-            [0, 0], [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
-        )
+        self.ui.stopLine1.setData([], [])
+        self.ui.stopLine2.setData([], [])
         self.ui.strtZoneFill.setRect(
             0,
             AROM.CURSOR_LOWER_LIMIT,
@@ -948,26 +972,26 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         _pgobj.addItem(self.ui.currPosLine1)
         _pgobj.addItem(self.ui.currPosLine2)
 
-        # ROM Lines
+        # ROM Lines — left=orange, right=blue (AROM cycling), both same for PROM/HOC
+        _arom_cycling = (self.data.romtype == pfadef.ROMType.ACTIVE
+                         and self.data.mechanism != "HOC")
+        _left_color  = "#FF8800" if _arom_cycling else "#FF8888"
+        _right_color = "#0088FF" if _arom_cycling else "#FF8888"
         self.ui.romLine1 = pg.PlotDataItem(
-            [0, 0],
-            [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
-            pen=pg.mkPen(color="#FF8888", width=2),
+            [], [],
+            pen=pg.mkPen(color=_left_color, width=2),
         )
         self.ui.romLine2 = pg.PlotDataItem(
-            [0, 0],
-            [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
-            pen=pg.mkPen(color="#FF8888", width=2),
+            [], [],
+            pen=pg.mkPen(color=_right_color, width=2),
         )
         _pgobj.addItem(self.ui.romLine1)
         _pgobj.addItem(self.ui.romLine2)
 
         # ROM Fill
         self.ui.romFill = QGraphicsRectItem()
-        self.ui.romFill.setBrush(
-            QColor(255, 136, 136, 80)
-        )  # match AROM color, alpha=80
-        self.ui.romFill.setPen(pg.mkPen(None))  # No border
+        self.ui.romFill.setBrush(QColor(180, 160, 255, 60))
+        self.ui.romFill.setPen(pg.mkPen(None))
         _pgobj.addItem(self.ui.romFill)
 
         # Stop zone Lines
