@@ -827,8 +827,13 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
 
         # AROM cycling: draw left/right independently from _disp_left/_disp_right
         if self._smachine._is_arom_cycling:
-            _dl = self.data._disp_left
-            _dr = self.data._disp_right
+            _dl  = self.data._disp_left
+            _dr  = self.data._disp_right
+            _gcl = self.data._last_cycle_left
+            _gcr = self.data._last_cycle_right
+            _h   = AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT
+
+            # Solid boundary lines
             if _dl is not None:
                 self.ui.romLine1.setData(
                     [self._dispsign * _dl, self._dispsign * _dl],
@@ -843,13 +848,46 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 )
             else:
                 self.ui.romLine2.setData([], [])
+
+            # Base fill between current boundaries
             if _dl is not None and _dr is not None:
                 _l = self._dispsign * min(_dl, _dr)
                 _r = self._dispsign * max(_dl, _dr)
-                self.ui.romFill.setRect(
-                    _l, AROM.CURSOR_LOWER_LIMIT,
-                    _r - _l, AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT,
+                self.ui.romFill.setRect(_l, AROM.CURSOR_LOWER_LIMIT, _r - _l, _h)
+
+            # Ghost lines — previous cycle's extremes
+            if _gcl is not None:
+                self.ui.ghostLeftLine.setData(
+                    [self._dispsign * _gcl, self._dispsign * _gcl],
+                    [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
                 )
+            else:
+                self.ui.ghostLeftLine.setData([], [])
+            if _gcr is not None:
+                self.ui.ghostRightLine.setData(
+                    [self._dispsign * _gcr, self._dispsign * _gcr],
+                    [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
+                )
+            else:
+                self.ui.ghostRightLine.setData([], [])
+
+            # Green extension fills — range beyond previous cycle
+            if _dl is not None and _gcl is not None and _dl < _gcl:
+                _lx = self._dispsign * min(_dl, _gcl)
+                self.ui.extFillLeft.setRect(
+                    _lx, AROM.CURSOR_LOWER_LIMIT,
+                    self._dispsign * abs(_gcl - _dl), _h,
+                )
+            else:
+                self.ui.extFillLeft.setRect(0, AROM.CURSOR_LOWER_LIMIT, 0, _h)
+            if _dr is not None and _gcr is not None and _dr > _gcr:
+                _lx = self._dispsign * min(_dr, _gcr)
+                self.ui.extFillRight.setRect(
+                    _lx, AROM.CURSOR_LOWER_LIMIT,
+                    self._dispsign * abs(_dr - _gcr), _h,
+                )
+            else:
+                self.ui.extFillRight.setRect(0, AROM.CURSOR_LOWER_LIMIT, 0, _h)
             return
 
         # PROM / HOC fallback
@@ -934,6 +972,16 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         # Reset rest position line
         if self.ui.restPosLine is not None:
             self.ui.restPosLine.setData([], [])
+        # Reset ghost lines and extension fills
+        _h = AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT
+        if self.ui.ghostLeftLine is not None:
+            self.ui.ghostLeftLine.setData([], [])
+        if self.ui.ghostRightLine is not None:
+            self.ui.ghostRightLine.setData([], [])
+        if self.ui.extFillLeft is not None:
+            self.ui.extFillLeft.setRect(0, AROM.CURSOR_LOWER_LIMIT, 0, _h)
+        if self.ui.extFillRight is not None:
+            self.ui.extFillRight.setRect(0, AROM.CURSOR_LOWER_LIMIT, 0, _h)
         # Hide direction indicator
         if self.ui.dirIndicator is not None:
             self.ui.dirIndicator.setVisible(False)
@@ -1014,13 +1062,35 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         self.ui.strtZoneFill.setPen(pg.mkPen(None))  # No border
         _pgobj.addItem(self.ui.strtZoneFill)
 
-        # Rest position line (AROM non-HOC cycling only)
+        # Rest position line + ghost lines + extension fills (AROM non-HOC cycling only)
         if self.data.romtype == pfadef.ROMType.ACTIVE and self.data.mechanism != "HOC":
             self.ui.restPosLine = pg.PlotDataItem(
                 [], [],
                 pen=pg.mkPen(color="#00FFFF", width=3),
             )
             _pgobj.addItem(self.ui.restPosLine)
+            # Ghost lines — previous cycle's boundaries (dashed, same hue as solid lines)
+            self.ui.ghostLeftLine = pg.PlotDataItem(
+                [], [],
+                pen=pg.mkPen(color=QColor(255, 136, 0, 140), width=1,
+                             style=QtCore.Qt.PenStyle.DashLine),
+            )
+            self.ui.ghostRightLine = pg.PlotDataItem(
+                [], [],
+                pen=pg.mkPen(color=QColor(0, 136, 255, 140), width=1,
+                             style=QtCore.Qt.PenStyle.DashLine),
+            )
+            _pgobj.addItem(self.ui.ghostLeftLine)
+            _pgobj.addItem(self.ui.ghostRightLine)
+            # Extension fills — green for range beyond previous cycle
+            self.ui.extFillLeft = QGraphicsRectItem()
+            self.ui.extFillLeft.setBrush(QColor(0, 220, 80, 90))
+            self.ui.extFillLeft.setPen(pg.mkPen(None))
+            _pgobj.addItem(self.ui.extFillLeft)
+            self.ui.extFillRight = QGraphicsRectItem()
+            self.ui.extFillRight.setBrush(QColor(0, 220, 80, 90))
+            self.ui.extFillRight.setPen(pg.mkPen(None))
+            _pgobj.addItem(self.ui.extFillRight)
             # Direction indicator — shown once at first trial WAIT_TO_MOVE
             self.ui.dirIndicator = pg.TextItem(
                 text="◄ Move LEFT first", color="#FFFF00", anchor=(0.5, 0.5)
@@ -1029,8 +1099,23 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.ui.dirIndicator.setFont(QtGui.QFont("Cascadia Mono Light", 20))
             self.ui.dirIndicator.setVisible(False)
             _pgobj.addItem(self.ui.dirIndicator)
+            # Z-order: fills → ghost lines → solid boundary lines → cursor → text
+            self.ui.romFill.setZValue(1)
+            self.ui.extFillLeft.setZValue(2)
+            self.ui.extFillRight.setZValue(2)
+            self.ui.ghostLeftLine.setZValue(3)
+            self.ui.ghostRightLine.setZValue(3)
+            self.ui.romLine1.setZValue(4)
+            self.ui.romLine2.setZValue(4)
+            self.ui.currPosLine1.setZValue(5)
+            self.ui.currPosLine2.setZValue(5)
+            self.ui.dirIndicator.setZValue(6)
         else:
             self.ui.restPosLine = None
+            self.ui.ghostLeftLine = None
+            self.ui.ghostRightLine = None
+            self.ui.extFillLeft = None
+            self.ui.extFillRight = None
             self.ui.dirIndicator = None
 
         # Angle display sign for the limb.
