@@ -41,6 +41,8 @@ class States(Enum):
     MOVING = auto()
     HOLDING = auto()
     HOLDING_IN_STOP_ZONE = auto()
+    CYCLING = auto()       # AROM non-HOC only
+    WAIT_FOR_REST = auto() # AROM non-HOC only
     NEW_ROM_SET = auto()
     DONE = auto()
 
@@ -57,13 +59,31 @@ class APRomData(object):
         self._currtrial = -1
         # ROM data
         self._rom = [[] for _ in range(self.ntrials)]
+        # AROM cycling fields (non-HOC AROM only)
+        self._dir = 0                     # 0=unknown, -1=left, +1=right
+        self._running_left = float('inf')    # running min while going left
+        self._running_right = float('-inf')  # running max while going right
+        self._cycle_left = None           # locked left extreme for current cycle
+        self._cycle_right = None          # locked right extreme for current cycle
+        self._last_cycle_left = None      # left extreme of last completed cycle
+        self._last_cycle_right = None     # right extreme of last completed cycle
+        self._cycles_completed = 0
+        self._rest_position = None
+        self._display_min = float('inf')  # drives _trialrom for live display
+        self._display_max = float('-inf')
         # Logging variables
         self._logstate: RawDataLoggingState = RawDataLoggingState.WAIT_FOR_LOG
         self._rawfilewriter: misc.CSVBufferWriter = misc.CSVBufferWriter(
             self.rawfile, header=AROM.RAW_HEADER
         )
+        _hdr = (
+            AROM.SUMMARY_HEADER_CYCLING
+            if assessinfo["romtype"] == pfadef.ROMType.ACTIVE
+               and assessinfo.get("mechanism") != "HOC"
+            else AROM.SUMMARY_HEADER
+        )
         self._summaryfilewriter: misc.CSVBufferWriter = misc.CSVBufferWriter(
-            self.summaryfile, header=AROM.SUMMARY_HEADER, flush_interval=0.0, max_rows=1
+            self.summaryfile, header=_hdr, flush_interval=0.0, max_rows=1
         )
 
     @property
@@ -154,6 +174,18 @@ class APRomData(object):
             self._trialrom = []
             self._startpos = None
             self._currtrial = 0 if reset else self._currtrial + 1
+            # Reset cycling fields
+            self._dir = 0
+            self._running_left = float('inf')
+            self._running_right = float('-inf')
+            self._cycle_left = None
+            self._cycle_right = None
+            self._last_cycle_left = None
+            self._last_cycle_right = None
+            self._cycles_completed = 0
+            self._rest_position = None
+            self._display_min = float('inf')
+            self._display_max = float('-inf')
 
     def add_newdata(self, dt, pos):
         """Add new data to the trial data."""
@@ -219,24 +251,88 @@ class APRomData(object):
                 and self._trialrom[-1] - self._startpos > _th
             )
 
+    def update_cycling_data(self, pos) -> bool:
+        """Update left/right directional extremes. Returns True when a full cycle completes."""
+        if not self._trialdata["vel"]:
+            return False
+        vel_mean = float(np.mean(self._trialdata["vel"]))
+        _vth = AROM.VEL_NOT_HOC_THRESHOLD
+
+        if vel_mean < -_vth:
+            new_dir = -1
+            self._running_left = min(self._running_left, pos)
+            self._display_min = min(self._display_min, pos)
+        elif vel_mean > _vth:
+            new_dir = +1
+            self._running_right = max(self._running_right, pos)
+            self._display_max = max(self._display_max, pos)
+        else:
+            return False
+
+        if self._display_min != float('inf') and self._display_max != float('-inf'):
+            self._trialrom = [self._display_min, self._display_max]
+
+        if self._dir != 0 and new_dir != self._dir:
+            if self._dir == -1:
+                self._cycle_left = self._running_left
+                self._running_left = float('inf')
+            else:
+                self._cycle_right = self._running_right
+                self._running_right = float('-inf')
+
+            if self._cycle_left is not None and self._cycle_right is not None:
+                self._cycles_completed += 1
+                self._last_cycle_left = self._cycle_left
+                self._last_cycle_right = self._cycle_right
+                self._cycle_left = None
+                self._cycle_right = None
+                self._dir = new_dir
+                return True
+
+        self._dir = new_dir
+        return False
+
+    @property
+    def cycles_done(self):
+        return self._cycles_completed >= AROM.NO_OF_CYCLES
+
+    def compute_rest_position(self):
+        self._rest_position = (self._last_cycle_left + self._last_cycle_right) / 2.0
+
     def set_rom(self):
         """Set the ROM value for the given trial."""
-        # Update ROM
-        self._rom[self._currtrial] = [self._trialrom[0], self._trialrom[-1]]
-        # Update the summary file.
-        self._summaryfilewriter.write_row(
-            [
+        if (self._assessinfo["romtype"] == pfadef.ROMType.ACTIVE
+                and self._assessinfo.get("mechanism") != "HOC"):
+            # AROM cycling path
+            self._rom[self._currtrial] = [self._last_cycle_left, self._last_cycle_right]
+            self._summaryfilewriter.write_row([
                 self.session,
                 self.type,
                 self.limb,
                 self.mechanism,
                 self.currtrial,
-                self._startpos,
-                self._trialrom[0],
-                self._trialrom[-1],
-                self._trialrom[-1] - self._trialrom[0],
-            ]
-        )
+                self._last_cycle_left,
+                self._last_cycle_right,
+                self._last_cycle_right - self._last_cycle_left,
+                self._rest_position,
+                self._cycles_completed,
+            ])
+        else:
+            # PROM / HOC path — unchanged
+            self._rom[self._currtrial] = [self._trialrom[0], self._trialrom[-1]]
+            self._summaryfilewriter.write_row(
+                [
+                    self.session,
+                    self.type,
+                    self.limb,
+                    self.mechanism,
+                    self.currtrial,
+                    self._startpos,
+                    self._trialrom[0],
+                    self._trialrom[-1],
+                    self._trialrom[-1] - self._trialrom[0],
+                ]
+            )
 
     def set_startpos(self):
         """Sets the start position as the average of trial data."""
@@ -270,6 +366,8 @@ class PlutoAPRomAssessmentStateMachine:
             States.MOVING: self._handle_moving,
             States.HOLDING: self._handle_holding,
             States.HOLDING_IN_STOP_ZONE: self._handle_holding_stop_zone,
+            States.CYCLING: self._handle_cycling,
+            States.WAIT_FOR_REST: self._handle_wait_for_rest,
             States.DONE: self._handle_done,
         }
         # Start a new trial.
@@ -280,11 +378,18 @@ class PlutoAPRomAssessmentStateMachine:
         return self._state
 
     @property
+    def _is_arom_cycling(self):
+        return (self._data.romtype == pfadef.ROMType.ACTIVE
+                and self._data.mechanism != "HOC")
+
+    @property
     def in_a_trial_state(self):
         return self._state in [
             States.MOVING,
             States.HOLDING,
             States.HOLDING_IN_STOP_ZONE,
+            States.CYCLING,
+            States.WAIT_FOR_REST,
         ]
 
     def reset_statemachine(self):
@@ -320,27 +425,39 @@ class PlutoAPRomAssessmentStateMachine:
         if event == pdef.PlutoEvents.RELEASED:
             # Make sure the joint is in rest before we can swtich.
             if self.subj_is_holding():
-                self._data.set_startpos()
-                self._trialrom = (
-                    []
-                    if self._data.mechanism != "HOC"
-                    else [
-                        0,
-                    ]
-                )
-                self._state = States.WAIT_TO_MOVE
-                self._statetimer = 0
-                # Set the logging state.
-                if not self._data.demomode:
-                    self._data.start_rawlogging()
+                if self._is_arom_cycling:
+                    # Record start position for away_from_start(), but don't use it as ROM ref.
+                    self._data.set_startpos()
+                    self._data._trialrom = []
+                    self._state = States.WAIT_TO_MOVE
+                    self._statetimer = 0
+                    if not self._data.demomode:
+                        self._data.start_rawlogging()
+                else:
+                    self._data.set_startpos()
+                    self._trialrom = (
+                        []
+                        if self._data.mechanism != "HOC"
+                        else [
+                            0,
+                        ]
+                    )
+                    self._state = States.WAIT_TO_MOVE
+                    self._statetimer = 0
+                    if not self._data.demomode:
+                        self._data.start_rawlogging()
 
     def _handle_wait_to_move(self, event, dt):
-        self._instruction = f"Move an hold to record ROM."
-        # Check if new data.
-        if event == pdef.PlutoEvents.NEWDATA:
-            # Wait for the subject to away from the start position.
-            if self.subj_is_holding() is False and self.away_from_start():
-                self._state = States.MOVING
+        if self._is_arom_cycling:
+            self._instruction = "Start cycling through your full range!"
+            if event == pdef.PlutoEvents.NEWDATA:
+                if not self.subj_is_holding():
+                    self._state = States.CYCLING
+        else:
+            self._instruction = f"Move an hold to record ROM."
+            if event == pdef.PlutoEvents.NEWDATA:
+                if self.subj_is_holding() is False and self.away_from_start():
+                    self._state = States.MOVING
 
     def _handle_moving(self, event, dt):
         self._instruction = f"Move and hold to record ROM position."
@@ -388,6 +505,33 @@ class PlutoAPRomAssessmentStateMachine:
                 # Go back to the moving state.
                 # Subject is moving again. Go back to moving state.
                 self._state = States.MOVING
+
+    def _handle_cycling(self, event, dt):
+        if event != pdef.PlutoEvents.NEWDATA:
+            return
+        self._data.update_cycling_data(self._pluto.angle)
+        n = self._data._cycles_completed
+        self._instruction = f"Keep cycling! {n}/{AROM.NO_OF_CYCLES} cycles done"
+        if self._data.cycles_done:
+            self._data.compute_rest_position()
+            self._statetimer = AROM.REST_ZONE_HOLD_DURATION
+            self._state = States.WAIT_FOR_REST
+
+    def _handle_wait_for_rest(self, event, dt):
+        if event != pdef.PlutoEvents.NEWDATA:
+            return
+        rp = self._data._rest_position
+        if self.subj_is_holding():
+            self._statetimer -= dt
+            self._instruction = f"Hold for {self._statetimer:2.1f}s at rest ({rp:.1f} deg)"
+            if self._statetimer <= 0:
+                if not self._data.demomode:
+                    self._data.set_rom()
+                    self._data.start_newtrial()
+                self._state = States.REST
+        else:
+            self._statetimer = AROM.REST_ZONE_HOLD_DURATION
+            self._instruction = f"Move to rest position ({rp:.1f} deg) and hold"
 
     def _handle_done(self, event, dt):
         pass
@@ -558,7 +702,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         # Skip AROM button state
         if hasattr(self.ui, "pbSkipArom"):
             self.ui.pbSkipArom.setEnabled(
-                self._smachine.state in (States.REST, States.WAIT_TO_MOVE)
+                self._smachine.state in (States.REST, States.WAIT_TO_MOVE, States.CYCLING, States.WAIT_FOR_REST)
                 and not self.data.all_trials_done
             )
 
@@ -568,7 +712,10 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
 
     def _update_visual_feedabck(self):
         self._update_current_position_cursor()
-        if self._smachine.in_a_trial_state:
+        if self._smachine.state in (States.CYCLING, States.WAIT_FOR_REST):
+            self._update_arom_cursor_position()
+            self._update_rest_pos_line()
+        elif self._smachine.in_a_trial_state:
             self._draw_stop_zone_lines()
             self._highlight_start_zone()
             self._update_arom_cursor_position()
@@ -711,6 +858,20 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT,
             )
 
+    def _update_rest_pos_line(self):
+        if self.ui.restPosLine is None:
+            return
+        rp = self.data._rest_position
+        if rp is not None:
+            self.ui.restPosLine.setData(
+                [self._dispsign * rp, self._dispsign * rp],
+                [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
+            )
+        else:
+            self.ui.restPosLine.setData(
+                [0, 0], [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
+            )
+
     def _reset_display(self):
         # Reset ROM display
         self.ui.romLine1.setData(
@@ -739,6 +900,11 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             0,
             AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT,
         )
+        # Reset rest position line
+        if self.ui.restPosLine is not None:
+            self.ui.restPosLine.setData(
+                [0, 0], [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
+            )
 
     #
     # Graph plot initialization
@@ -814,6 +980,17 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         self.ui.strtZoneFill.setBrush(QColor(136, 255, 136, 80))
         self.ui.strtZoneFill.setPen(pg.mkPen(None))  # No border
         _pgobj.addItem(self.ui.strtZoneFill)
+
+        # Rest position line (AROM non-HOC cycling only)
+        if self.data.romtype == pfadef.ROMType.ACTIVE and self.data.mechanism != "HOC":
+            self.ui.restPosLine = pg.PlotDataItem(
+                [0, 0],
+                [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
+                pen=pg.mkPen(color="#00FFFF", width=3),
+            )
+            _pgobj.addItem(self.ui.restPosLine)
+        else:
+            self.ui.restPosLine = None
 
         # Angle display sign for the limb.
         self._dispsign = 1.0
