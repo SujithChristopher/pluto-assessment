@@ -877,9 +877,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
             )
         else:
-            self.ui.restPosLine.setData(
-                [0, 0], [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
-            )
+            self.ui.restPosLine.setData([], [])
 
     def _reset_display(self):
         # Reset ROM display
@@ -911,9 +909,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         )
         # Reset rest position line
         if self.ui.restPosLine is not None:
-            self.ui.restPosLine.setData(
-                [0, 0], [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
-            )
+            self.ui.restPosLine.setData([], [])
         # Hide direction indicator
         if self.ui.dirIndicator is not None:
             self.ui.dirIndicator.setVisible(False)
@@ -997,8 +993,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         # Rest position line (AROM non-HOC cycling only)
         if self.data.romtype == pfadef.ROMType.ACTIVE and self.data.mechanism != "HOC":
             self.ui.restPosLine = pg.PlotDataItem(
-                [0, 0],
-                [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
+                [], [],
                 pen=pg.mkPen(color="#00FFFF", width=3),
             )
             _pgobj.addItem(self.ui.restPosLine)
