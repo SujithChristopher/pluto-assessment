@@ -254,8 +254,8 @@ class APRomData(object):
             )
 
     def update_cycling_data(self, is_holding: bool) -> bool:
-        """Capture left/right extremes at rest (hold) transitions.
-        Returns True when a full cycle (hold left + hold right) completes."""
+        """Capture left/right extremes when patient pauses at each extreme.
+        Returns True when a full cycle (left + right) completes."""
         if not self._trialdata["pos"]:
             return False
 
@@ -263,7 +263,6 @@ class APRomData(object):
             self._was_holding = False
             return False
 
-        # Only process the moving→holding transition once
         if self._was_holding:
             return False
         self._was_holding = True
@@ -271,13 +270,11 @@ class APRomData(object):
         rest_pos = float(self._trialdata["pos"][int(np.argmin(np.abs(self._trialdata["vel"])))])
 
         if rest_pos < self._startpos:
-            # Left marker can only move further left, never right
             if self._curr_left is None or rest_pos < self._curr_left:
                 self._curr_left = rest_pos
                 self._disp_left = rest_pos
             self._held_left_this_cycle = True
         else:
-            # Right marker can only move further right, never left
             if self._curr_right is None or rest_pos > self._curr_right:
                 self._curr_right = rest_pos
                 self._disp_right = rest_pos
@@ -567,13 +564,6 @@ class PlutoAPRomAssessmentStateMachine:
         )
         return bool(np.all(np.abs(self._data.trialdata["vel"]) < _th))
 
-    def _is_at_cycling_extreme(self):
-        """Soft hold check for cycling: last CYCLING_HOLD_SAMPLES all below threshold."""
-        _vel = self._data.trialdata["vel"]
-        n = AROM.CYCLING_HOLD_SAMPLES
-        if len(_vel) < n:
-            return False
-        return bool(np.all(np.abs(_vel[-n:]) < AROM.VEL_NOT_HOC_THRESHOLD))
 
     def away_from_start(self):
         """Check if the subject has moved away from the start position."""
@@ -606,6 +596,15 @@ class PlutoAPRomAssessmentStateMachine:
         if rp is None:
             return False
         return bool(np.abs(self._pluto.angle - rp) <= AROM.REST_ZONE_HALF_WIDTH)
+
+    def _is_at_cycling_extreme(self):
+        """True when last CYCLING_HOLD_SAMPLES are all below CYCLING_VEL_THRESHOLD.
+        Lower threshold than subj_is_holding so slow movement doesn't trigger early."""
+        _vel = self._data.trialdata["vel"]
+        n = AROM.CYCLING_HOLD_SAMPLES
+        if len(_vel) < n:
+            return False
+        return bool(np.all(np.abs(_vel[-n:]) < AROM.CYCLING_VEL_THRESHOLD))
 
     # def trial_rom_outside_frobidden_zones(self):
     #     """Ensures that the AROM tiral ROM values are away from the start
