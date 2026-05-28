@@ -64,6 +64,7 @@ class APRomData(object):
         self._curr_right = None           # this cycle's right hold position
         self._last_cycle_left = None      # left extreme of last completed cycle
         self._last_cycle_right = None     # right extreme of last completed cycle
+        self._cycle_history = []          # (left, right) per completed cycle, max 3
         self._cycles_completed = 0
         self._was_holding = False
         self._held_left_this_cycle = False
@@ -180,6 +181,7 @@ class APRomData(object):
             self._curr_right = None
             self._last_cycle_left = None
             self._last_cycle_right = None
+            self._cycle_history = []
             self._cycles_completed = 0
             self._was_holding = False
             self._held_left_this_cycle = False
@@ -283,6 +285,9 @@ class APRomData(object):
             self._cycles_completed += 1
             self._last_cycle_left = self._curr_left
             self._last_cycle_right = self._curr_right
+            self._cycle_history.append((self._curr_left, self._curr_right))
+            if len(self._cycle_history) > 3:
+                self._cycle_history.pop(0)
             self._curr_left = None
             self._curr_right = None
             self._held_left_this_cycle = False
@@ -294,6 +299,18 @@ class APRomData(object):
     @property
     def cycles_done(self):
         return self._cycles_completed >= AROM.NO_OF_CYCLES
+
+    @property
+    def ghost_left(self):
+        if not self._cycle_history:
+            return None
+        return min(c[0] for c in self._cycle_history)
+
+    @property
+    def ghost_right(self):
+        if not self._cycle_history:
+            return None
+        return max(c[1] for c in self._cycle_history)
 
     def compute_rest_position(self):
         """Midpoint estimate used as display guide only; actual rest captured later."""
@@ -824,8 +841,8 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         if self._smachine._is_arom_cycling:
             _dl  = self.data._disp_left
             _dr  = self.data._disp_right
-            _gcl = self.data._last_cycle_left
-            _gcr = self.data._last_cycle_right
+            _gcl = self.data.ghost_left
+            _gcr = self.data.ghost_right
             _h   = AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT
 
             # Solid boundary lines
