@@ -253,7 +253,9 @@ class BaseConstants:
 class AROM(BaseConstants):
     NO_OF_TRIALS = 3  # Number of trials.
     NO_OF_CYCLES = 5  # Full oscillation cycles required (non-HOC AROM only).
-    REST_ZONE_HOLD_DURATION = 1.0  # sec patient must hold at computed rest position.
+    REST_ZONE_HOLD_DURATION = 1.0  # sec to hold inside rest zone to complete trial.
+    REST_ZONE_HALF_WIDTH = 5  # deg — half-width of rest zone (total = 10 deg).
+    CYCLING_HOLD_SAMPLES = 10  # samples of low vel to detect a cycling extreme hold.
     SUMMARY_HEADER_CYCLING = [
         "session", "type", "limb", "mechanism",
         "trial", "last_cycle_left", "last_cycle_right",

@@ -70,7 +70,6 @@ class APRomData(object):
         self._held_left_this_cycle = False
         self._held_right_this_cycle = False
         self._rest_position = None
-        self._rest_locked = False
         self._disp_left = None            # left boundary for display
         self._disp_right = None           # right boundary for display
         # Logging variables
@@ -187,7 +186,6 @@ class APRomData(object):
             self._held_left_this_cycle = False
             self._held_right_this_cycle = False
             self._rest_position = None
-            self._rest_locked = False
             self._disp_left = None
             self._disp_right = None
 
@@ -273,12 +271,16 @@ class APRomData(object):
         rest_pos = float(self._trialdata["pos"][int(np.argmin(np.abs(self._trialdata["vel"])))])
 
         if rest_pos < self._startpos:
-            self._curr_left = rest_pos
-            self._disp_left = rest_pos
+            # Left marker can only move further left, never right
+            if self._curr_left is None or rest_pos < self._curr_left:
+                self._curr_left = rest_pos
+                self._disp_left = rest_pos
             self._held_left_this_cycle = True
         else:
-            self._curr_right = rest_pos
-            self._disp_right = rest_pos
+            # Right marker can only move further right, never left
+            if self._curr_right is None or rest_pos > self._curr_right:
+                self._curr_right = rest_pos
+                self._disp_right = rest_pos
             self._held_right_this_cycle = True
 
         if self._held_left_this_cycle and self._held_right_this_cycle:
@@ -313,13 +315,8 @@ class APRomData(object):
         return max(c[1] for c in self._cycle_history)
 
     def compute_rest_position(self):
-        """Midpoint estimate used as display guide only; actual rest captured later."""
-        self._rest_position = (self._last_cycle_left + self._last_cycle_right) / 2.0
-
-    def capture_rest_position(self):
-        """Lock in rest position at the lowest-velocity sample in the current window."""
-        self._rest_position = float(self._trialdata["pos"][int(np.argmin(np.abs(self._trialdata["vel"])))])
-        self._rest_locked = True
+        """Set rest position as midpoint of best-of-last-3-cycles range. Anchored."""
+        self._rest_position = (self.ghost_left + self.ghost_right) / 2.0
 
     def set_rom(self):
         """Set the ROM value for the given trial."""
@@ -382,7 +379,6 @@ class PlutoAPRomAssessmentStateMachine:
         self._instruction = f""
         self._instdisp = instdisp
         self._pluto = plutodev
-        self._rest_motion_seen = False
         self._stateactions = {
             States.REST: self._handle_rest,
             States.WAIT_TO_MOVE: self._handle_wait_to_move,
@@ -532,36 +528,27 @@ class PlutoAPRomAssessmentStateMachine:
     def _handle_cycling(self, event, dt):
         if event != pdef.PlutoEvents.NEWDATA:
             return
-        self._data.update_cycling_data(self.subj_is_holding())
+        self._data.update_cycling_data(self._is_at_cycling_extreme())
         n = self._data._cycles_completed
         self._instruction = f"Keep cycling! {n}/{AROM.NO_OF_CYCLES} cycles done"
         if self._data.cycles_done:
             self._data.compute_rest_position()
             self._statetimer = AROM.REST_ZONE_HOLD_DURATION
-            self._rest_motion_seen = False
             self._state = States.WAIT_FOR_REST
 
     def _handle_wait_for_rest(self, event, dt):
         if event != pdef.PlutoEvents.NEWDATA:
             return
         rp = self._data._rest_position
-        if self.subj_is_holding():
-            if not self._rest_motion_seen:
-                # Still at cycling extreme — must move first
-                self._instruction = f"Move to rest position ({rp:.1f} deg) and hold"
-                return
-            # Movement seen; lock rest position on first hold
-            if not self._data._rest_locked:
-                self._data.capture_rest_position()
+        if self.subj_is_holding() and self.subj_in_rest_zone():
             self._statetimer -= dt
-            self._instruction = f"Hold for {self._statetimer:2.1f}s at rest ({self._data._rest_position:.1f} deg)"
+            self._instruction = f"Hold for {self._statetimer:2.1f}s at rest ({rp:.1f} deg)"
             if self._statetimer <= 0:
                 if not self._data.demomode:
                     self._data.set_rom()
                     self._data.start_newtrial()
                 self._state = States.REST
         else:
-            self._rest_motion_seen = True
             self._statetimer = AROM.REST_ZONE_HOLD_DURATION
             self._instruction = f"Move to rest position ({rp:.1f} deg) and hold"
 
@@ -579,6 +566,14 @@ class PlutoAPRomAssessmentStateMachine:
             else AROM.VEL_NOT_HOC_THRESHOLD
         )
         return bool(np.all(np.abs(self._data.trialdata["vel"]) < _th))
+
+    def _is_at_cycling_extreme(self):
+        """Soft hold check for cycling: last CYCLING_HOLD_SAMPLES all below threshold."""
+        _vel = self._data.trialdata["vel"]
+        n = AROM.CYCLING_HOLD_SAMPLES
+        if len(_vel) < n:
+            return False
+        return bool(np.all(np.abs(_vel[-n:]) < AROM.VEL_NOT_HOC_THRESHOLD))
 
     def away_from_start(self):
         """Check if the subject has moved away from the start position."""
@@ -604,6 +599,13 @@ class PlutoAPRomAssessmentStateMachine:
                 np.abs(self._pluto.angle - self._data.startpos)
                 < AROM.STOP_POS_NOT_HOC_THRESHOLD
             )
+
+    def subj_in_rest_zone(self):
+        """Check if subject is within REST_ZONE_HALF_WIDTH of the rest position."""
+        rp = self._data._rest_position
+        if rp is None:
+            return False
+        return bool(np.abs(self._pluto.angle - rp) <= AROM.REST_ZONE_HALF_WIDTH)
 
     # def trial_rom_outside_frobidden_zones(self):
     #     """Ensures that the AROM tiral ROM values are away from the start
@@ -953,13 +955,21 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         if self.ui.restPosLine is None:
             return
         rp = self.data._rest_position
+        _h = AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT
         if rp is not None:
             self.ui.restPosLine.setData(
                 [self._dispsign * rp, self._dispsign * rp],
                 [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
             )
+            self.ui.restZoneFill.setRect(
+                self._dispsign * rp - AROM.REST_ZONE_HALF_WIDTH,
+                AROM.CURSOR_LOWER_LIMIT,
+                2 * AROM.REST_ZONE_HALF_WIDTH,
+                _h,
+            )
         else:
             self.ui.restPosLine.setData([], [])
+            self.ui.restZoneFill.setRect(0, AROM.CURSOR_LOWER_LIMIT, 0, _h)
 
     def _reset_display(self):
         # Reset ROM display
@@ -981,9 +991,12 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             0,
             AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT,
         )
-        # Reset rest position line
+        # Reset rest position line and zone
         if self.ui.restPosLine is not None:
             self.ui.restPosLine.setData([], [])
+        if self.ui.restZoneFill is not None:
+            _h = AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT
+            self.ui.restZoneFill.setRect(0, AROM.CURSOR_LOWER_LIMIT, 0, _h)
         # Reset ghost lines and extension fills
         _h = AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT
         if self.ui.ghostLeftLine is not None:
@@ -1076,6 +1089,10 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
 
         # Rest position line + ghost lines + extension fills (AROM non-HOC cycling only)
         if self.data.romtype == pfadef.ROMType.ACTIVE and self.data.mechanism != "HOC":
+            self.ui.restZoneFill = QGraphicsRectItem()
+            self.ui.restZoneFill.setBrush(QColor(0, 255, 255, 40))
+            self.ui.restZoneFill.setPen(pg.mkPen(None))
+            _pgobj.addItem(self.ui.restZoneFill)
             self.ui.restPosLine = pg.PlotDataItem(
                 [], [],
                 pen=pg.mkPen(color="#00FFFF", width=3),
@@ -1111,18 +1128,21 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.ui.dirIndicator.setFont(QtGui.QFont("Cascadia Mono Light", 20))
             self.ui.dirIndicator.setVisible(False)
             _pgobj.addItem(self.ui.dirIndicator)
-            # Z-order: fills → ghost lines → solid boundary lines → cursor → text
+            # Z-order: fills → zone → ghost lines → boundary lines → cursor → text
             self.ui.romFill.setZValue(1)
             self.ui.extFillLeft.setZValue(2)
             self.ui.extFillRight.setZValue(2)
-            self.ui.ghostLeftLine.setZValue(3)
-            self.ui.ghostRightLine.setZValue(3)
-            self.ui.romLine1.setZValue(4)
-            self.ui.romLine2.setZValue(4)
-            self.ui.currPosLine1.setZValue(5)
-            self.ui.currPosLine2.setZValue(5)
-            self.ui.dirIndicator.setZValue(6)
+            self.ui.restZoneFill.setZValue(3)
+            self.ui.ghostLeftLine.setZValue(4)
+            self.ui.ghostRightLine.setZValue(4)
+            self.ui.romLine1.setZValue(5)
+            self.ui.romLine2.setZValue(5)
+            self.ui.restPosLine.setZValue(6)
+            self.ui.currPosLine1.setZValue(7)
+            self.ui.currPosLine2.setZValue(7)
+            self.ui.dirIndicator.setZValue(8)
         else:
+            self.ui.restZoneFill = None
             self.ui.restPosLine = None
             self.ui.ghostLeftLine = None
             self.ui.ghostRightLine = None
