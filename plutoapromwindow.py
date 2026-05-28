@@ -60,19 +60,18 @@ class APRomData(object):
         # ROM data
         self._rom = [[] for _ in range(self.ntrials)]
         # AROM cycling fields (non-HOC AROM only)
-        self._dir = 0                     # 0=unknown, -1=left, +1=right
-        self._running_left = float('inf')    # running min while going left
-        self._running_right = float('-inf')  # running max while going right
-        self._cycle_left = None           # locked left extreme for current cycle
-        self._cycle_right = None          # locked right extreme for current cycle
+        self._curr_left = None            # this cycle's left hold position
+        self._curr_right = None           # this cycle's right hold position
         self._last_cycle_left = None      # left extreme of last completed cycle
         self._last_cycle_right = None     # right extreme of last completed cycle
         self._cycles_completed = 0
+        self._was_holding = False
+        self._held_left_this_cycle = False
+        self._held_right_this_cycle = False
         self._rest_position = None
-        self._display_min = float('inf')
-        self._display_max = float('-inf')
-        self._disp_left = None   # live left boundary for display
-        self._disp_right = None  # live right boundary for display
+        self._rest_locked = False
+        self._disp_left = None            # left boundary for display
+        self._disp_right = None           # right boundary for display
         # Logging variables
         self._logstate: RawDataLoggingState = RawDataLoggingState.WAIT_FOR_LOG
         self._rawfilewriter: misc.CSVBufferWriter = misc.CSVBufferWriter(
@@ -177,17 +176,16 @@ class APRomData(object):
             self._startpos = None
             self._currtrial = 0 if reset else self._currtrial + 1
             # Reset cycling fields
-            self._dir = 0
-            self._running_left = float('inf')
-            self._running_right = float('-inf')
-            self._cycle_left = None
-            self._cycle_right = None
+            self._curr_left = None
+            self._curr_right = None
             self._last_cycle_left = None
             self._last_cycle_right = None
             self._cycles_completed = 0
+            self._was_holding = False
+            self._held_left_this_cycle = False
+            self._held_right_this_cycle = False
             self._rest_position = None
-            self._display_min = float('inf')
-            self._display_max = float('-inf')
+            self._rest_locked = False
             self._disp_left = None
             self._disp_right = None
 
@@ -209,7 +207,7 @@ class APRomData(object):
         """Add new value to trial ROM only if its different from existing ROM,
         and outside AROM if AROM is given.
         """
-        _pos = float(np.mean(self._trialdata["pos"]))
+        _pos = float(self._trialdata["pos"][int(np.argmin(np.abs(self._trialdata["vel"])))])
         # Check of the _pos is well outside the current limits of trialrom
         _th = (
             AROM.HOC_NEW_ROM_TH if self.mechanism == "HOC" else AROM.NOT_HOC_NEW_ROM_TH
@@ -255,61 +253,42 @@ class APRomData(object):
                 and self._trialrom[-1] - self._startpos > _th
             )
 
-    def update_cycling_data(self) -> bool:
-        """Update left/right directional extremes using smoothed position (Option A).
-        Returns True when a full cycle completes."""
-        if not self._trialdata["vel"] or not self._trialdata["pos"]:
+    def update_cycling_data(self, is_holding: bool) -> bool:
+        """Capture left/right extremes at rest (hold) transitions.
+        Returns True when a full cycle (hold left + hold right) completes."""
+        if not self._trialdata["pos"]:
             return False
-        vel_mean = float(np.mean(self._trialdata["vel"]))
-        mean_pos = float(np.mean(self._trialdata["pos"]))
-        _vth = AROM.VEL_NOT_HOC_THRESHOLD
 
-        if vel_mean < -_vth:
-            new_dir = -1
-            self._running_left = min(self._running_left, mean_pos)
-            self._display_min = min(self._display_min, mean_pos)
-        elif vel_mean > _vth:
-            new_dir = +1
-            self._running_right = max(self._running_right, mean_pos)
-            self._display_max = max(self._display_max, mean_pos)
+        if not is_holding:
+            self._was_holding = False
+            return False
+
+        # Only process the moving→holding transition once
+        if self._was_holding:
+            return False
+        self._was_holding = True
+
+        rest_pos = float(self._trialdata["pos"][int(np.argmin(np.abs(self._trialdata["vel"])))])
+
+        if rest_pos < self._startpos:
+            self._curr_left = rest_pos
+            self._disp_left = rest_pos
+            self._held_left_this_cycle = True
         else:
-            return False
+            self._curr_right = rest_pos
+            self._disp_right = rest_pos
+            self._held_right_this_cycle = True
 
-        # Live left boundary: running extreme while moving left, else last confirmed
-        if self._dir == -1 and self._running_left != float('inf'):
-            self._disp_left = self._running_left
-        elif self._cycle_left is not None:
-            self._disp_left = self._cycle_left
-        elif self._last_cycle_left is not None:
-            self._disp_left = self._last_cycle_left
+        if self._held_left_this_cycle and self._held_right_this_cycle:
+            self._cycles_completed += 1
+            self._last_cycle_left = self._curr_left
+            self._last_cycle_right = self._curr_right
+            self._curr_left = None
+            self._curr_right = None
+            self._held_left_this_cycle = False
+            self._held_right_this_cycle = False
+            return True
 
-        # Live right boundary: running extreme while moving right, else last confirmed
-        if self._dir == +1 and self._running_right != float('-inf'):
-            self._disp_right = self._running_right
-        elif self._cycle_right is not None:
-            self._disp_right = self._cycle_right
-        elif self._last_cycle_right is not None:
-            self._disp_right = self._last_cycle_right
-
-        # Direction reversal
-        if self._dir != 0 and new_dir != self._dir:
-            if self._dir == -1:
-                self._cycle_left = self._running_left
-                self._running_left = float('inf')
-            else:
-                self._cycle_right = self._running_right
-                self._running_right = float('-inf')
-
-            if self._cycle_left is not None and self._cycle_right is not None:
-                self._cycles_completed += 1
-                self._last_cycle_left = self._cycle_left
-                self._last_cycle_right = self._cycle_right
-                self._cycle_left = None
-                self._cycle_right = None
-                self._dir = new_dir
-                return True
-
-        self._dir = new_dir
         return False
 
     @property
@@ -317,7 +296,13 @@ class APRomData(object):
         return self._cycles_completed >= AROM.NO_OF_CYCLES
 
     def compute_rest_position(self):
+        """Midpoint estimate used as display guide only; actual rest captured later."""
         self._rest_position = (self._last_cycle_left + self._last_cycle_right) / 2.0
+
+    def capture_rest_position(self):
+        """Lock in rest position at the lowest-velocity sample in the current window."""
+        self._rest_position = float(self._trialdata["pos"][int(np.argmin(np.abs(self._trialdata["vel"])))])
+        self._rest_locked = True
 
     def set_rom(self):
         """Set the ROM value for the given trial."""
@@ -355,8 +340,8 @@ class APRomData(object):
             )
 
     def set_startpos(self):
-        """Sets the start position as the average of trial data."""
-        self._startpos = float(np.mean(self._trialdata["pos"]))
+        """Sets the start position at the sample of lowest velocity in the window."""
+        self._startpos = float(self._trialdata["pos"][int(np.argmin(np.abs(self._trialdata["vel"])))])
         self._trialrom = [self._startpos]
 
     def start_rawlogging(self):
@@ -380,6 +365,7 @@ class PlutoAPRomAssessmentStateMachine:
         self._instruction = f""
         self._instdisp = instdisp
         self._pluto = plutodev
+        self._rest_motion_seen = False
         self._stateactions = {
             States.REST: self._handle_rest,
             States.WAIT_TO_MOVE: self._handle_wait_to_move,
@@ -529,12 +515,13 @@ class PlutoAPRomAssessmentStateMachine:
     def _handle_cycling(self, event, dt):
         if event != pdef.PlutoEvents.NEWDATA:
             return
-        self._data.update_cycling_data()
+        self._data.update_cycling_data(self.subj_is_holding())
         n = self._data._cycles_completed
         self._instruction = f"Keep cycling! {n}/{AROM.NO_OF_CYCLES} cycles done"
         if self._data.cycles_done:
             self._data.compute_rest_position()
             self._statetimer = AROM.REST_ZONE_HOLD_DURATION
+            self._rest_motion_seen = False
             self._state = States.WAIT_FOR_REST
 
     def _handle_wait_for_rest(self, event, dt):
@@ -542,14 +529,22 @@ class PlutoAPRomAssessmentStateMachine:
             return
         rp = self._data._rest_position
         if self.subj_is_holding():
+            if not self._rest_motion_seen:
+                # Still at cycling extreme — must move first
+                self._instruction = f"Move to rest position ({rp:.1f} deg) and hold"
+                return
+            # Movement seen; lock rest position on first hold
+            if not self._data._rest_locked:
+                self._data.capture_rest_position()
             self._statetimer -= dt
-            self._instruction = f"Hold for {self._statetimer:2.1f}s at rest ({rp:.1f} deg)"
+            self._instruction = f"Hold for {self._statetimer:2.1f}s at rest ({self._data._rest_position:.1f} deg)"
             if self._statetimer <= 0:
                 if not self._data.demomode:
                     self._data.set_rom()
                     self._data.start_newtrial()
                 self._state = States.REST
         else:
+            self._rest_motion_seen = True
             self._statetimer = AROM.REST_ZONE_HOLD_DURATION
             self._instruction = f"Move to rest position ({rp:.1f} deg) and hold"
 
