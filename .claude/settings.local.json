@@ -32,7 +32,9 @@
       "Bash(uv run:*)",
       "Bash(grep -rn \"pluto\\\\.gripforce\" *.py)",
       "Bash(Get-ChildItem E:\\\\homer\\\\pluto-assessment\\\\pluto*window.py -File)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(git show *)",
+      "Read(//tmp/**)"
     ]
   }
 }

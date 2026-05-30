@@ -59,12 +59,13 @@ class APRomData(object):
         self._currtrial = -1
         # ROM data
         self._rom = [[] for _ in range(self.ntrials)]
-        # AROM cycling fields (non-HOC AROM only) — reversal-based tracking
-        self._dir = 0                        # 0=unknown, -1=left, +1=right
-        self._running_left = float("inf")    # running min while moving left
-        self._running_right = float("-inf")  # running max while moving right
-        self._cycle_left = None              # locked left extreme, current cycle
-        self._cycle_right = None             # locked right extreme, current cycle
+        # AROM cycling fields (non-HOC AROM only) — rest-driven marking.
+        # Nothing is drawn while moving; a boundary is marked when the subject
+        # comes to rest (|vel| ~ 0). Side is decided by displacement.
+        self._cycle_left = None              # committed left extreme, current cycle
+        self._cycle_right = None             # committed right extreme, current cycle
+        self._rest_committed = False         # guard: mark once per rest
+        self._last_rest_pos = None           # position of last marked rest (side reference)
         self._cycle_history = []          # (left, right) per completed cycle, max 3
         self._cycles_completed = 0
         self._rest_position = None
@@ -174,11 +175,10 @@ class APRomData(object):
             self._startpos = None
             self._currtrial = 0 if reset else self._currtrial + 1
             # Reset cycling fields
-            self._dir = 0
-            self._running_left = float("inf")
-            self._running_right = float("-inf")
             self._cycle_left = None
             self._cycle_right = None
+            self._rest_committed = False
+            self._last_rest_pos = None
             self._cycle_history = []
             self._cycles_completed = 0
             self._rest_position = None
@@ -250,47 +250,50 @@ class APRomData(object):
             )
 
     def update_cycling_data(self, pos) -> bool:
-        """Track left/right extremes continuously by movement direction.
-        Running min while moving left, running max while moving right; an
-        extreme is locked on direction reversal. No pause required, and the
-        start position is not used to partition left vs right.
-        Returns True when a full cycle (left + right locked) completes."""
+        """Rest-driven boundary marking (nothing is drawn while moving).
+
+        Like the ui-refinement "hold to mark" approach: movement alone draws
+        nothing. A boundary is marked only when the subject comes to rest
+        (|vel| <= CYCLING_REST_VEL_THRESHOLD, ~0 deg/s) — the rest position is
+        recorded as that side's extreme.
+
+        The side is decided by net displacement since the last rest (left if
+        the rest is further left, right if further right). A rest closer than
+        CYCLING_MIN_EXCURSION to the previous rest is not a distinct extreme,
+        so stopping twice on the same side does not complete a cycle.
+        Returns True when both a left and a right rest have been marked (one
+        cycle)."""
         if not self._trialdata["vel"]:
             return False
 
-        # Smoothed direction from the recent velocity window; a deadband
-        # keeps noise/turnaround from flipping direction spuriously.
         _n = AROM.CYCLING_HOLD_SAMPLES
         vel_mean = float(np.mean(self._trialdata["vel"][-_n:]))
-        _vth = AROM.CYCLING_VEL_THRESHOLD
+        _rest_th = AROM.CYCLING_REST_VEL_THRESHOLD
 
-        if vel_mean < -_vth:
-            new_dir = -1
-            self._running_left = min(self._running_left, pos)
-            self._disp_left = self._running_left
-        elif vel_mean > _vth:
-            new_dir = +1
-            self._running_right = max(self._running_right, pos)
-            self._disp_right = self._running_right
-        else:
-            # In deadband: hold current direction/extremes, wait it out.
+        # Moving: draw nothing, just re-arm the next rest mark.
+        if abs(vel_mean) > _rest_th:
+            self._rest_committed = False
             return False
 
-        # No reversal -> keep extending the current segment.
-        if self._dir == 0 or new_dir == self._dir:
-            self._dir = new_dir
+        # At rest: mark once, and only for a genuine new extreme.
+        if self._rest_committed:
             return False
-
-        # Direction reversed -> lock the extreme of the segment just ended.
-        if self._dir == -1:
-            self._cycle_left = self._running_left
-            self._running_left = float("inf")
+        _ref = self._last_rest_pos if self._last_rest_pos is not None else self._startpos
+        if _ref is None or abs(pos - _ref) < AROM.CYCLING_MIN_EXCURSION:
+            # Same spot / jitter — not a distinct extreme. Don't mark a side.
+            self._rest_committed = True
+            return False
+        # Side from net displacement since the last rest, not velocity sign.
+        if pos < _ref:
+            self._cycle_left = pos
+            self._disp_left = pos
         else:
-            self._cycle_right = self._running_right
-            self._running_right = float("-inf")
-        self._dir = new_dir
+            self._cycle_right = pos
+            self._disp_right = pos
+        self._rest_committed = True
+        self._last_rest_pos = pos
 
-        # A cycle is complete once both a left and a right extreme are locked.
+        # A cycle is complete once both a left and a right extreme are marked.
         if self._cycle_left is not None and self._cycle_right is not None:
             self._cycles_completed += 1
             self._cycle_history.append((self._cycle_left, self._cycle_right))
@@ -309,10 +312,12 @@ class APRomData(object):
     @property
     def best_cycle(self):
         """Best cycle in the current window (last <=3 completed): the one with
-        the widest AROM range. Window grows 1 -> 2 -> 3 then slides."""
+        the widest AROM range. Window grows 1 -> 2 -> 3 then slides. Returned
+        as (left, right) with left <= right regardless of mark order."""
         if not self._cycle_history:
             return None
-        return max(self._cycle_history, key=lambda c: c[1] - c[0])
+        _bc = max(self._cycle_history, key=lambda c: abs(c[1] - c[0]))
+        return (min(_bc), max(_bc))
 
     @property
     def ghost_left(self):
@@ -481,7 +486,9 @@ class PlutoAPRomAssessmentStateMachine:
         if self._is_arom_cycling:
             self._instruction = "Move LEFT ◄ first, then cycle back and forth"
             if event == pdef.PlutoEvents.NEWDATA:
-                if not self.subj_is_holding():
+                # Start on position displacement, not speed, so a slow mover
+                # (never crossing the draw threshold) still begins cycling.
+                if self.away_from_start():
                     self._state = States.CYCLING
         else:
             self._instruction = f"Move an hold to record ROM."
@@ -843,15 +850,14 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 )
             return
 
-        # AROM cycling: draw left/right independently from _disp_left/_disp_right
+        # AROM cycling: solid lines = current L/R rest marks; filled band =
+        # best of the last <=3 cycles.
         if self._smachine._is_arom_cycling:
-            _dl  = self.data._disp_left
-            _dr  = self.data._disp_right
-            _gcl = self.data.ghost_left
-            _gcr = self.data.ghost_right
-            _h   = AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT
+            _h  = AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT
 
-            # Solid boundary lines
+            # Current boundary marks (updated each time the subject rests L/R)
+            _dl = self.data._disp_left
+            _dr = self.data._disp_right
             if _dl is not None:
                 self.ui.romLine1.setData(
                     [self._dispsign * _dl, self._dispsign * _dl],
@@ -867,45 +873,15 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             else:
                 self.ui.romLine2.setData([], [])
 
-            # Base fill between current boundaries
-            if _dl is not None and _dr is not None:
-                _l = self._dispsign * min(_dl, _dr)
-                _r = self._dispsign * max(_dl, _dr)
+            # Best-of-3 band
+            _bl = self.data.ghost_left
+            _br = self.data.ghost_right
+            if _bl is not None and _br is not None:
+                _l = self._dispsign * min(_bl, _br)
+                _r = self._dispsign * max(_bl, _br)
                 self.ui.romFill.setRect(_l, AROM.CURSOR_LOWER_LIMIT, _r - _l, _h)
-
-            # Ghost lines — previous cycle's extremes
-            if _gcl is not None:
-                self.ui.ghostLeftLine.setData(
-                    [self._dispsign * _gcl, self._dispsign * _gcl],
-                    [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
-                )
             else:
-                self.ui.ghostLeftLine.setData([], [])
-            if _gcr is not None:
-                self.ui.ghostRightLine.setData(
-                    [self._dispsign * _gcr, self._dispsign * _gcr],
-                    [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
-                )
-            else:
-                self.ui.ghostRightLine.setData([], [])
-
-            # Green extension fills — range beyond previous cycle
-            if _dl is not None and _gcl is not None and _dl < _gcl:
-                _lx = self._dispsign * min(_dl, _gcl)
-                self.ui.extFillLeft.setRect(
-                    _lx, AROM.CURSOR_LOWER_LIMIT,
-                    self._dispsign * abs(_gcl - _dl), _h,
-                )
-            else:
-                self.ui.extFillLeft.setRect(0, AROM.CURSOR_LOWER_LIMIT, 0, _h)
-            if _dr is not None and _gcr is not None and _dr > _gcr:
-                _lx = self._dispsign * min(_dr, _gcr)
-                self.ui.extFillRight.setRect(
-                    _lx, AROM.CURSOR_LOWER_LIMIT,
-                    self._dispsign * abs(_dr - _gcr), _h,
-                )
-            else:
-                self.ui.extFillRight.setRect(0, AROM.CURSOR_LOWER_LIMIT, 0, _h)
+                self.ui.romFill.setRect(0, AROM.CURSOR_LOWER_LIMIT, 0, _h)
             return
 
         # PROM / HOC fallback
@@ -1091,7 +1067,8 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         self.ui.strtZoneFill.setPen(pg.mkPen(None))  # No border
         _pgobj.addItem(self.ui.strtZoneFill)
 
-        # Rest position line + ghost lines + extension fills (AROM non-HOC cycling only)
+        # Rest position line (AROM non-HOC cycling only). Best-of-3 boundary is
+        # shown with romLine1/romLine2/romFill; no ghost or extension visuals.
         if self.data.romtype == pfadef.ROMType.ACTIVE and self.data.mechanism != "HOC":
             self.ui.restZoneFill = QGraphicsRectItem()
             self.ui.restZoneFill.setBrush(QColor(0, 255, 255, 40))
@@ -1102,28 +1079,6 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 pen=pg.mkPen(color="#00FFFF", width=3),
             )
             _pgobj.addItem(self.ui.restPosLine)
-            # Ghost lines — previous cycle's boundaries (dashed, same hue as solid lines)
-            self.ui.ghostLeftLine = pg.PlotDataItem(
-                [], [],
-                pen=pg.mkPen(color=QColor(255, 136, 0, 140), width=1,
-                             style=QtCore.Qt.PenStyle.DashLine),
-            )
-            self.ui.ghostRightLine = pg.PlotDataItem(
-                [], [],
-                pen=pg.mkPen(color=QColor(0, 136, 255, 140), width=1,
-                             style=QtCore.Qt.PenStyle.DashLine),
-            )
-            _pgobj.addItem(self.ui.ghostLeftLine)
-            _pgobj.addItem(self.ui.ghostRightLine)
-            # Extension fills — green for range beyond previous cycle
-            self.ui.extFillLeft = QGraphicsRectItem()
-            self.ui.extFillLeft.setBrush(QColor(0, 220, 80, 90))
-            self.ui.extFillLeft.setPen(pg.mkPen(None))
-            _pgobj.addItem(self.ui.extFillLeft)
-            self.ui.extFillRight = QGraphicsRectItem()
-            self.ui.extFillRight.setBrush(QColor(0, 220, 80, 90))
-            self.ui.extFillRight.setPen(pg.mkPen(None))
-            _pgobj.addItem(self.ui.extFillRight)
             # Direction indicator — shown once at first trial WAIT_TO_MOVE
             self.ui.dirIndicator = pg.TextItem(
                 text="◄ Move LEFT first", color="#FFFF00", anchor=(0.5, 0.5)
@@ -1132,13 +1087,14 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.ui.dirIndicator.setFont(QtGui.QFont("Cascadia Mono Light", 20))
             self.ui.dirIndicator.setVisible(False)
             _pgobj.addItem(self.ui.dirIndicator)
-            # Z-order: fills → zone → ghost lines → boundary lines → cursor → text
+            # Unused (removed ghost/extension visuals)
+            self.ui.ghostLeftLine = None
+            self.ui.ghostRightLine = None
+            self.ui.extFillLeft = None
+            self.ui.extFillRight = None
+            # Z-order: fill → zone → boundary lines → cursor → text
             self.ui.romFill.setZValue(1)
-            self.ui.extFillLeft.setZValue(2)
-            self.ui.extFillRight.setZValue(2)
             self.ui.restZoneFill.setZValue(3)
-            self.ui.ghostLeftLine.setZValue(4)
-            self.ui.ghostRightLine.setZValue(4)
             self.ui.romLine1.setZValue(5)
             self.ui.romLine2.setZValue(5)
             self.ui.restPosLine.setZValue(6)

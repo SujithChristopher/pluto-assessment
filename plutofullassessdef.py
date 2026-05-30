@@ -255,8 +255,9 @@ class AROM(BaseConstants):
     NO_OF_CYCLES = 5  # Full oscillation cycles required (non-HOC AROM only).
     REST_ZONE_HOLD_DURATION = 1.0  # sec to hold inside rest zone to complete trial.
     REST_ZONE_HALF_WIDTH = 5  # deg — half-width of rest zone (total = 10 deg).
-    CYCLING_HOLD_SAMPLES = 10  # samples checked for cycling extreme detection.
-    CYCLING_VEL_THRESHOLD = 5  # deg/s — velocity must be below this to register a cycling pause.
+    CYCLING_HOLD_SAMPLES = 10  # samples averaged for cycling velocity estimate.
+    CYCLING_REST_VEL_THRESHOLD = 1.0  # deg/s — at/below this = at rest; the rest position is marked as a boundary. Tunable.
+    CYCLING_MIN_EXCURSION = 5.0  # deg — a rest must be this far from the last rest to count as a new extreme (rejects settle jitter / same-spot stops).
     SUMMARY_HEADER_CYCLING = [
         "session", "type", "limb", "mechanism",
         "trial", "last_cycle_left", "last_cycle_right",
