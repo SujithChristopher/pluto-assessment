@@ -59,16 +59,14 @@ class APRomData(object):
         self._currtrial = -1
         # ROM data
         self._rom = [[] for _ in range(self.ntrials)]
-        # AROM cycling fields (non-HOC AROM only)
-        self._curr_left = None            # this cycle's left hold position
-        self._curr_right = None           # this cycle's right hold position
-        self._last_cycle_left = None      # left extreme of last completed cycle
-        self._last_cycle_right = None     # right extreme of last completed cycle
+        # AROM cycling fields (non-HOC AROM only) — reversal-based tracking
+        self._dir = 0                        # 0=unknown, -1=left, +1=right
+        self._running_left = float("inf")    # running min while moving left
+        self._running_right = float("-inf")  # running max while moving right
+        self._cycle_left = None              # locked left extreme, current cycle
+        self._cycle_right = None             # locked right extreme, current cycle
         self._cycle_history = []          # (left, right) per completed cycle, max 3
         self._cycles_completed = 0
-        self._was_holding = False
-        self._held_left_this_cycle = False
-        self._held_right_this_cycle = False
         self._rest_position = None
         self._disp_left = None            # left boundary for display
         self._disp_right = None           # right boundary for display
@@ -176,15 +174,13 @@ class APRomData(object):
             self._startpos = None
             self._currtrial = 0 if reset else self._currtrial + 1
             # Reset cycling fields
-            self._curr_left = None
-            self._curr_right = None
-            self._last_cycle_left = None
-            self._last_cycle_right = None
+            self._dir = 0
+            self._running_left = float("inf")
+            self._running_right = float("-inf")
+            self._cycle_left = None
+            self._cycle_right = None
             self._cycle_history = []
             self._cycles_completed = 0
-            self._was_holding = False
-            self._held_left_this_cycle = False
-            self._held_right_this_cycle = False
             self._rest_position = None
             self._disp_left = None
             self._disp_right = None
@@ -253,44 +249,55 @@ class APRomData(object):
                 and self._trialrom[-1] - self._startpos > _th
             )
 
-    def update_cycling_data(self, is_holding: bool) -> bool:
-        """Capture left/right extremes when patient pauses at each extreme.
-        Returns True when a full cycle (left + right) completes."""
-        if not self._trialdata["pos"]:
+    def update_cycling_data(self, pos) -> bool:
+        """Track left/right extremes continuously by movement direction.
+        Running min while moving left, running max while moving right; an
+        extreme is locked on direction reversal. No pause required, and the
+        start position is not used to partition left vs right.
+        Returns True when a full cycle (left + right locked) completes."""
+        if not self._trialdata["vel"]:
             return False
 
-        if not is_holding:
-            self._was_holding = False
-            return False
+        # Smoothed direction from the recent velocity window; a deadband
+        # keeps noise/turnaround from flipping direction spuriously.
+        _n = AROM.CYCLING_HOLD_SAMPLES
+        vel_mean = float(np.mean(self._trialdata["vel"][-_n:]))
+        _vth = AROM.CYCLING_VEL_THRESHOLD
 
-        if self._was_holding:
-            return False
-        self._was_holding = True
-
-        rest_pos = float(self._trialdata["pos"][int(np.argmin(np.abs(self._trialdata["vel"])))])
-
-        if rest_pos < self._startpos:
-            if self._curr_left is None or rest_pos < self._curr_left:
-                self._curr_left = rest_pos
-                self._disp_left = rest_pos
-            self._held_left_this_cycle = True
+        if vel_mean < -_vth:
+            new_dir = -1
+            self._running_left = min(self._running_left, pos)
+            self._disp_left = self._running_left
+        elif vel_mean > _vth:
+            new_dir = +1
+            self._running_right = max(self._running_right, pos)
+            self._disp_right = self._running_right
         else:
-            if self._curr_right is None or rest_pos > self._curr_right:
-                self._curr_right = rest_pos
-                self._disp_right = rest_pos
-            self._held_right_this_cycle = True
+            # In deadband: hold current direction/extremes, wait it out.
+            return False
 
-        if self._held_left_this_cycle and self._held_right_this_cycle:
+        # No reversal -> keep extending the current segment.
+        if self._dir == 0 or new_dir == self._dir:
+            self._dir = new_dir
+            return False
+
+        # Direction reversed -> lock the extreme of the segment just ended.
+        if self._dir == -1:
+            self._cycle_left = self._running_left
+            self._running_left = float("inf")
+        else:
+            self._cycle_right = self._running_right
+            self._running_right = float("-inf")
+        self._dir = new_dir
+
+        # A cycle is complete once both a left and a right extreme are locked.
+        if self._cycle_left is not None and self._cycle_right is not None:
             self._cycles_completed += 1
-            self._last_cycle_left = self._curr_left
-            self._last_cycle_right = self._curr_right
-            self._cycle_history.append((self._curr_left, self._curr_right))
+            self._cycle_history.append((self._cycle_left, self._cycle_right))
             if len(self._cycle_history) > 3:
                 self._cycle_history.pop(0)
-            self._curr_left = None
-            self._curr_right = None
-            self._held_left_this_cycle = False
-            self._held_right_this_cycle = False
+            self._cycle_left = None
+            self._cycle_right = None
             return True
 
         return False
@@ -300,36 +307,43 @@ class APRomData(object):
         return self._cycles_completed >= AROM.NO_OF_CYCLES
 
     @property
-    def ghost_left(self):
+    def best_cycle(self):
+        """Best cycle in the current window (last <=3 completed): the one with
+        the widest AROM range. Window grows 1 -> 2 -> 3 then slides."""
         if not self._cycle_history:
             return None
-        return min(c[0] for c in self._cycle_history)
+        return max(self._cycle_history, key=lambda c: c[1] - c[0])
+
+    @property
+    def ghost_left(self):
+        bc = self.best_cycle
+        return None if bc is None else bc[0]
 
     @property
     def ghost_right(self):
-        if not self._cycle_history:
-            return None
-        return max(c[1] for c in self._cycle_history)
+        bc = self.best_cycle
+        return None if bc is None else bc[1]
 
     def compute_rest_position(self):
-        """Set rest position as midpoint of best-of-last-3-cycles range. Anchored."""
+        """Rest position = midpoint of the best cycle's AROM in the window."""
         self._rest_position = (self.ghost_left + self.ghost_right) / 2.0
 
     def set_rom(self):
         """Set the ROM value for the given trial."""
         if (self._assessinfo["romtype"] == pfadef.ROMType.ACTIVE
                 and self._assessinfo.get("mechanism") != "HOC"):
-            # AROM cycling path
-            self._rom[self._currtrial] = [self._last_cycle_left, self._last_cycle_right]
+            # AROM cycling path — AROM = best cycle in window (widest range).
+            _bl, _br = self.best_cycle
+            self._rom[self._currtrial] = [_bl, _br]
             self._summaryfilewriter.write_row([
                 self.session,
                 self.type,
                 self.limb,
                 self.mechanism,
                 self.currtrial,
-                self._last_cycle_left,
-                self._last_cycle_right,
-                self._last_cycle_right - self._last_cycle_left,
+                _bl,
+                _br,
+                _br - _bl,
                 self._rest_position,
                 self._cycles_completed,
             ])
@@ -525,7 +539,7 @@ class PlutoAPRomAssessmentStateMachine:
     def _handle_cycling(self, event, dt):
         if event != pdef.PlutoEvents.NEWDATA:
             return
-        self._data.update_cycling_data(self._is_at_cycling_extreme())
+        self._data.update_cycling_data(self._pluto.angle)
         n = self._data._cycles_completed
         self._instruction = f"Keep cycling! {n}/{AROM.NO_OF_CYCLES} cycles done"
         if self._data.cycles_done:
@@ -596,15 +610,6 @@ class PlutoAPRomAssessmentStateMachine:
         if rp is None:
             return False
         return bool(np.abs(self._pluto.angle - rp) <= AROM.REST_ZONE_HALF_WIDTH)
-
-    def _is_at_cycling_extreme(self):
-        """True when last CYCLING_HOLD_SAMPLES are all below CYCLING_VEL_THRESHOLD.
-        Lower threshold than subj_is_holding so slow movement doesn't trigger early."""
-        _vel = self._data.trialdata["vel"]
-        n = AROM.CYCLING_HOLD_SAMPLES
-        if len(_vel) < n:
-            return False
-        return bool(np.all(np.abs(_vel[-n:]) < AROM.CYCLING_VEL_THRESHOLD))
 
     # def trial_rom_outside_frobidden_zones(self):
     #     """Ensures that the AROM tiral ROM values are away from the start
