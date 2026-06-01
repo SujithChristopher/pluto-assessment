@@ -1,0 +1,2 @@
+session,type,limb,mechanism,trial,last_cycle_left,last_cycle_right,last_cycle_range,rest_position,cycles_completed
+testing,Stroke,RIGHT,FPS,0,-44.67656326293945,12.937498092651367,57.61406135559082,-15.869532585144043,5
