@@ -67,6 +67,7 @@ class APRomData(object):
         self._rest_committed = False         # guard: mark once per rest
         self._last_rest_pos = None           # position of last marked rest (side reference)
         self._cycle_history = []          # (left, right) per completed cycle, max 3
+        self._all_cycles = []             # (left, right) per completed cycle, all of them
         self._cycles_completed = 0
         self._rest_position = None
         self._disp_left = None            # left boundary for display
@@ -180,6 +181,7 @@ class APRomData(object):
             self._rest_committed = False
             self._last_rest_pos = None
             self._cycle_history = []
+            self._all_cycles = []
             self._cycles_completed = 0
             self._rest_position = None
             self._disp_left = None
@@ -319,6 +321,7 @@ class APRomData(object):
             if _is_left:
                 self._cycles_completed += 1
                 self._cycle_history.append((self._cycle_left, self._cycle_right))
+                self._all_cycles.append((self._cycle_left, self._cycle_right))
                 if len(self._cycle_history) > 3:
                     self._cycle_history.pop(0)
                 self._cycle_right = None
@@ -343,6 +346,11 @@ class APRomData(object):
                 self._disp_right = pos
 
         return False
+
+    @property
+    def all_cycles(self):
+        """Every completed cycle as (left, right), left <= right."""
+        return [(min(c), max(c)) for c in self._all_cycles]
 
     @property
     def cycles_done(self):
@@ -806,6 +814,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.ui.dirIndicator.setVisible(_show_arrow)
         if self._smachine.state in (States.CYCLING, States.WAIT_FOR_REST):
             self._update_arom_cursor_position()
+            self._update_cycle_history_lines()
             self._update_rest_pos_line()
         elif self._smachine.in_a_trial_state:
             self._draw_stop_zone_lines()
@@ -970,6 +979,24 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT,
             )
 
+    def _update_cycle_history_lines(self):
+        """Draw every completed cycle as a pair of dotted lines: left extreme
+        orange, right extreme blue."""
+        if not self.ui.cycleLeftLines:
+            return
+        _cycles = self.data.all_cycles
+        _y = [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
+        for _i, (_ll, _rl) in enumerate(
+            zip(self.ui.cycleLeftLines, self.ui.cycleRightLines)
+        ):
+            if _i < len(_cycles):
+                _l, _r = _cycles[_i]
+                _ll.setData([self._dispsign * _l, self._dispsign * _l], _y)
+                _rl.setData([self._dispsign * _r, self._dispsign * _r], _y)
+            else:
+                _ll.setData([], [])
+                _rl.setData([], [])
+
     def _update_rest_pos_line(self):
         if self.ui.restPosLine is None:
             return
@@ -1026,6 +1053,11 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.ui.extFillLeft.setRect(0, AROM.CURSOR_LOWER_LIMIT, 0, _h)
         if self.ui.extFillRight is not None:
             self.ui.extFillRight.setRect(0, AROM.CURSOR_LOWER_LIMIT, 0, _h)
+        # Reset completed-cycle dotted lines
+        for _ll in self.ui.cycleLeftLines:
+            _ll.setData([], [])
+        for _rl in self.ui.cycleRightLines:
+            _rl.setData([], [])
         # Hide direction indicator
         if self.ui.dirIndicator is not None:
             self.ui.dirIndicator.setVisible(False)
@@ -1118,6 +1150,27 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 pen=pg.mkPen(color="#00FFFF", width=3),
             )
             _pgobj.addItem(self.ui.restPosLine)
+            # Completed-cycle dotted lines — left extremes orange, right blue.
+            # One pair per possible cycle; drawn as a cycle completes.
+            self.ui.cycleLeftLines = []
+            self.ui.cycleRightLines = []
+            for _ in range(AROM.NO_OF_CYCLES):
+                _ll = pg.PlotDataItem(
+                    [], [],
+                    pen=pg.mkPen(color="#FF8800", width=1,
+                                 style=QtCore.Qt.PenStyle.DotLine),
+                )
+                _rl = pg.PlotDataItem(
+                    [], [],
+                    pen=pg.mkPen(color="#0088FF", width=1,
+                                 style=QtCore.Qt.PenStyle.DotLine),
+                )
+                _ll.setZValue(4)
+                _rl.setZValue(4)
+                _pgobj.addItem(_ll)
+                _pgobj.addItem(_rl)
+                self.ui.cycleLeftLines.append(_ll)
+                self.ui.cycleRightLines.append(_rl)
             # Direction indicator — shown once at first trial WAIT_TO_MOVE
             self.ui.dirIndicator = pg.TextItem(
                 text="◄ Move LEFT first", color="#FFFF00", anchor=(0.5, 0.5)
@@ -1148,6 +1201,8 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.ui.extFillLeft = None
             self.ui.extFillRight = None
             self.ui.dirIndicator = None
+            self.ui.cycleLeftLines = []
+            self.ui.cycleRightLines = []
 
         # Angle display sign for the limb.
         self._dispsign = 1.0
