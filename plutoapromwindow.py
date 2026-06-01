@@ -996,6 +996,13 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             else:
                 _ll.setData([], [])
                 _rl.setData([], [])
+        # Top-right readout: AROM (deg) per completed cycle.
+        if self.ui.cycleListText is not None:
+            _lines = [
+                f"Cycle {_i + 1}: {abs(_r - _l):.1f} deg"
+                for _i, (_l, _r) in enumerate(_cycles)
+            ]
+            self.ui.cycleListText.setText("\n".join(_lines))
 
     def _update_rest_pos_line(self):
         if self.ui.restPosLine is None:
@@ -1058,6 +1065,8 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             _ll.setData([], [])
         for _rl in self.ui.cycleRightLines:
             _rl.setData([], [])
+        if self.ui.cycleListText is not None:
+            self.ui.cycleListText.setText("")
         # Hide direction indicator
         if self.ui.dirIndicator is not None:
             self.ui.dirIndicator.setVisible(False)
@@ -1152,6 +1161,14 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             _pgobj.addItem(self.ui.restPosLine)
             # Completed-cycle dotted lines — left extremes orange, right blue.
             # One pair per possible cycle; drawn as a cycle completes.
+            # Per-cycle AROM readout in the top-right corner.
+            self.ui.cycleListText = pg.TextItem(
+                text="", color="#FFFFFF", anchor=(1, 0)
+            )
+            self.ui.cycleListText.setPos(_range[1], 19)
+            self.ui.cycleListText.setFont(QtGui.QFont("Cascadia Mono Light", 11))
+            self.ui.cycleListText.setZValue(8)
+            _pgobj.addItem(self.ui.cycleListText)
             self.ui.cycleLeftLines = []
             self.ui.cycleRightLines = []
             for _ in range(AROM.NO_OF_CYCLES):
@@ -1201,6 +1218,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.ui.extFillLeft = None
             self.ui.extFillRight = None
             self.ui.dirIndicator = None
+            self.ui.cycleListText = None
             self.ui.cycleLeftLines = []
             self.ui.cycleRightLines = []
 
