@@ -921,10 +921,12 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             else:
                 self.ui.romLine2.setData([], [])
 
-            # Best-of-3 band
+            # Best-of-3 envelope band — shown ONLY at the end (after the 5th
+            # cycle, i.e. in WAIT_FOR_REST), not on every cycle.
             _bl = self.data.ghost_left
             _br = self.data.ghost_right
-            if _bl is not None and _br is not None:
+            if (self._smachine.state == States.WAIT_FOR_REST
+                    and _bl is not None and _br is not None):
                 _l = self._dispsign * min(_bl, _br)
                 _r = self._dispsign * max(_bl, _br)
                 self.ui.romFill.setRect(_l, AROM.CURSOR_LOWER_LIMIT, _r - _l, _h)
@@ -1002,6 +1004,11 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 f"Cycle {_i + 1}: {abs(_r - _l):.1f} deg"
                 for _i, (_l, _r) in enumerate(_cycles)
             ]
+            # Final AROM = best of last 3 cycles, shown only once cycling done.
+            _bc = self.data.best_cycle
+            if self.data.cycles_done and _bc is not None:
+                _lines.append("")
+                _lines.append(f"AROM: {abs(_bc[1] - _bc[0]):.1f} deg")
             self.ui.cycleListText.setText("\n".join(_lines))
 
     def _update_rest_pos_line(self):
