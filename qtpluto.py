@@ -457,7 +457,7 @@ if __name__ == "__main__":
     from qtjedi import JediComm
 
     app = QApplication(sys.argv)
-    pluto = QtPluto(port="COM4")
+    pluto = QtPluto(port="COM19")
     pluto.stop_sensorstream()
     pluto.get_version()
     pluto.get_version()

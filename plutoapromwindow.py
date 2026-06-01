@@ -263,11 +263,15 @@ class APRomData(object):
             existing mark, push that mark outward. This runs continuously while
             at rest, so a slow creep toward the extreme keeps extending the
             boundary instead of stalling.
-          - Seeding/cycle: a distinct new rest (>= CYCLING_MIN_EXCURSION from
-            the last rest) seeds the side it falls on (left/right of the last
-            rest) if not yet marked this cycle, and segments cycles.
-        Returns True when both a left and a right extreme are marked (one
-        cycle)."""
+          - Seeding: a distinct new rest (>= CYCLING_MIN_EXCURSION from the
+            last rest) seeds the side it falls on (left/right of the last rest)
+            if not yet marked this cycle.
+        Cycle completion is deferred: a cycle is not closed when the second
+        (right) extreme is first marked — that would freeze the right extreme
+        instantly while the left one had a window to grow. Instead both extremes
+        stay live (and keep extending) until the subject reverses back toward
+        the start with a new distinct LEFT rest, which closes the cycle and
+        seeds the next one. Returns True on that cycle-closing reversal."""
         if not self._trialdata["vel"]:
             return False
 
@@ -298,8 +302,38 @@ class APRomData(object):
             # Same spot / jitter — not a distinct new extreme.
             return False
         self._last_rest_pos = pos
-        # Side from displacement since the last rest; seed only if unmarked.
-        if pos < _ref:
+        # Side from displacement since the last rest (LEFT = back toward the
+        # start/first-move direction; RIGHT = the far extreme).
+        _is_left = pos < _ref
+        _both_marked = (
+            self._cycle_left is not None and self._cycle_right is not None
+        )
+
+        # Deferred completion: once both extremes are marked, the cycle is NOT
+        # closed yet. The far (right) extreme stays alive so a further push out
+        # keeps extending it — symmetric with how the left extreme could grow
+        # before the right was marked. The cycle is finalized only when the
+        # subject reverses back toward the start (a new distinct LEFT rest),
+        # which simultaneously seeds the next cycle's left extreme.
+        if _both_marked:
+            if _is_left:
+                self._cycles_completed += 1
+                self._cycle_history.append((self._cycle_left, self._cycle_right))
+                if len(self._cycle_history) > 3:
+                    self._cycle_history.pop(0)
+                self._cycle_right = None
+                self._disp_right = None
+                self._cycle_left = pos
+                self._disp_left = pos
+                return True
+            # Still pushing further out on the far side — extend it.
+            if pos > self._cycle_right:
+                self._cycle_right = pos
+                self._disp_right = pos
+            return False
+
+        # Not both marked yet — seed (or extend) the side this rest falls on.
+        if _is_left:
             if self._cycle_left is None or pos < self._cycle_left:
                 self._cycle_left = pos
                 self._disp_left = pos
@@ -307,16 +341,6 @@ class APRomData(object):
             if self._cycle_right is None or pos > self._cycle_right:
                 self._cycle_right = pos
                 self._disp_right = pos
-
-        # A cycle is complete once both a left and a right extreme are marked.
-        if self._cycle_left is not None and self._cycle_right is not None:
-            self._cycles_completed += 1
-            self._cycle_history.append((self._cycle_left, self._cycle_right))
-            if len(self._cycle_history) > 3:
-                self._cycle_history.pop(0)
-            self._cycle_left = None
-            self._cycle_right = None
-            return True
 
         return False
 
@@ -1282,7 +1306,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
-    plutodev = QtPluto("COM4")
+    plutodev = QtPluto("COM19")
     plutodev.start_sensorstream()
     plutodev.send_heartbeat()
     pcalib = PlutoAPRomAssessWindow(
