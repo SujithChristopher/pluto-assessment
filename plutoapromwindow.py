@@ -257,11 +257,16 @@ class APRomData(object):
         (|vel| <= CYCLING_REST_VEL_THRESHOLD, ~0 deg/s) — the rest position is
         recorded as that side's extreme.
 
-        The side is decided by net displacement since the last rest (left if
-        the rest is further left, right if further right). A rest closer than
-        CYCLING_MIN_EXCURSION to the previous rest is not a distinct extreme,
-        so stopping twice on the same side does not complete a cycle.
-        Returns True when both a left and a right rest have been marked (one
+        Velocity is used only to detect rest (|vel| <= threshold), never to
+        infer direction (which made slow movement messy). At rest:
+          - Extension: if the current position is farther out than the side's
+            existing mark, push that mark outward. This runs continuously while
+            at rest, so a slow creep toward the extreme keeps extending the
+            boundary instead of stalling.
+          - Seeding/cycle: a distinct new rest (>= CYCLING_MIN_EXCURSION from
+            the last rest) seeds the side it falls on (left/right of the last
+            rest) if not yet marked this cycle, and segments cycles.
+        Returns True when both a left and a right extreme are marked (one
         cycle)."""
         if not self._trialdata["vel"]:
             return False
@@ -270,28 +275,38 @@ class APRomData(object):
         vel_mean = float(np.mean(self._trialdata["vel"][-_n:]))
         _rest_th = AROM.CYCLING_REST_VEL_THRESHOLD
 
-        # Moving: draw nothing, just re-arm the next rest mark.
+        # Moving: draw nothing, just re-arm the next rest event.
         if abs(vel_mean) > _rest_th:
             self._rest_committed = False
             return False
 
-        # At rest: mark once, and only for a genuine new extreme.
-        if self._rest_committed:
-            return False
-        _ref = self._last_rest_pos if self._last_rest_pos is not None else self._startpos
-        if _ref is None or abs(pos - _ref) < AROM.CYCLING_MIN_EXCURSION:
-            # Same spot / jitter — not a distinct extreme. Don't mark a side.
-            self._rest_committed = True
-            return False
-        # Side from net displacement since the last rest, not velocity sign.
-        if pos < _ref:
+        # At rest — extend the current extremes outward if beaten (continuous,
+        # so slow creep keeps growing the boundary).
+        if self._cycle_left is not None and pos < self._cycle_left:
             self._cycle_left = pos
             self._disp_left = pos
-        else:
+        if self._cycle_right is not None and pos > self._cycle_right:
             self._cycle_right = pos
             self._disp_right = pos
+
+        # Only seed a side / segment a cycle once per distinct rest event.
+        if self._rest_committed:
+            return False
         self._rest_committed = True
+        _ref = self._last_rest_pos if self._last_rest_pos is not None else self._startpos
+        if _ref is None or abs(pos - _ref) < AROM.CYCLING_MIN_EXCURSION:
+            # Same spot / jitter — not a distinct new extreme.
+            return False
         self._last_rest_pos = pos
+        # Side from displacement since the last rest; seed only if unmarked.
+        if pos < _ref:
+            if self._cycle_left is None or pos < self._cycle_left:
+                self._cycle_left = pos
+                self._disp_left = pos
+        else:
+            if self._cycle_right is None or pos > self._cycle_right:
+                self._cycle_right = pos
+                self._disp_right = pos
 
         # A cycle is complete once both a left and a right extreme are marked.
         if self._cycle_left is not None and self._cycle_right is not None:
