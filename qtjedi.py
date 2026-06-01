@@ -158,7 +158,7 @@ class JediComm(QThread):
 
 
 if __name__ == "__main__":
-    jedireader = JediComm("COM19")
+    jedireader = JediComm("COM5")
     jedireader.start()
     time.sleep(10)
     jedireader.abort()

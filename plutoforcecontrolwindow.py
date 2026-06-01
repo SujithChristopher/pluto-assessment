@@ -912,7 +912,7 @@ if __name__ == "__main__":
 
     qtjedi._OUTDEBUG = False
     app = QtWidgets.QApplication(sys.argv)
-    plutodev = QtPluto("COM19")
+    plutodev = QtPluto("COM5")
     pcalib = PlutoForceControlWindow(
         plutodev=plutodev,
         assessinfo={

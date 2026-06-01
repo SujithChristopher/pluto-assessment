@@ -1306,7 +1306,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
-    plutodev = QtPluto("COM19")
+    plutodev = QtPluto("COM5")
     plutodev.start_sensorstream()
     plutodev.send_heartbeat()
     pcalib = PlutoAPRomAssessWindow(
