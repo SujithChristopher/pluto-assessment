@@ -34,7 +34,9 @@
       "Bash(Get-ChildItem E:\\\\homer\\\\pluto-assessment\\\\pluto*window.py -File)",
       "Bash(Select-Object Name)",
       "Bash(git show *)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

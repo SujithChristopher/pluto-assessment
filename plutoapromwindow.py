@@ -80,7 +80,6 @@ class APRomData(object):
         _hdr = (
             AROM.SUMMARY_HEADER_CYCLING
             if assessinfo["romtype"] == pfadef.ROMType.ACTIVE
-               and assessinfo.get("mechanism") != "HOC"
             else AROM.SUMMARY_HEADER
         )
         self._summaryfilewriter: misc.CSVBufferWriter = misc.CSVBufferWriter(
@@ -295,7 +294,17 @@ class APRomData(object):
 
         _n = AROM.CYCLING_HOLD_SAMPLES
         vel_mean = float(np.mean(self._trialdata["vel"][-_n:]))
-        _rest_th = AROM.CYCLING_REST_VEL_THRESHOLD
+        _is_hoc = self.mechanism == "HOC"
+        _rest_th = (
+            AROM.CYCLING_REST_VEL_THRESHOLD_HOC
+            if _is_hoc
+            else AROM.CYCLING_REST_VEL_THRESHOLD
+        )
+        _min_excursion = (
+            AROM.CYCLING_MIN_EXCURSION_HOC
+            if _is_hoc
+            else AROM.CYCLING_MIN_EXCURSION
+        )
 
         # Moving: draw nothing, just re-arm the next rest event.
         if abs(vel_mean) > _rest_th:
@@ -316,7 +325,7 @@ class APRomData(object):
             return False
         self._rest_committed = True
         _ref = self._last_rest_pos if self._last_rest_pos is not None else self._startpos
-        if _ref is None or abs(pos - _ref) < AROM.CYCLING_MIN_EXCURSION:
+        if _ref is None or abs(pos - _ref) < _min_excursion:
             # Same spot / jitter — not a distinct new extreme.
             return False
         self._last_rest_pos = pos
@@ -398,8 +407,7 @@ class APRomData(object):
 
     def set_rom(self):
         """Set the ROM value for the given trial."""
-        if (self._assessinfo["romtype"] == pfadef.ROMType.ACTIVE
-                and self._assessinfo.get("mechanism") != "HOC"):
+        if self._assessinfo["romtype"] == pfadef.ROMType.ACTIVE:
             # AROM cycling path — AROM = best cycle in window (widest range).
             _bl, _br = self.best_cycle
             self._rom[self._currtrial] = [_bl, _br]
@@ -437,8 +445,7 @@ class APRomData(object):
         time limit expires. Mirrors set_rom's header choice so the row width
         matches. No valid ROM is recorded for the trial."""
         _dnq = "did not qualify"
-        if (self._assessinfo["romtype"] == pfadef.ROMType.ACTIVE
-                and self._assessinfo.get("mechanism") != "HOC"):
+        if self._assessinfo["romtype"] == pfadef.ROMType.ACTIVE:
             # Cycling header (10 cols)
             self._summaryfilewriter.write_row([
                 self.session, self.type, self.limb, self.mechanism,
@@ -505,8 +512,7 @@ class PlutoAPRomAssessmentStateMachine:
 
     @property
     def _is_arom_cycling(self):
-        return (self._data.romtype == pfadef.ROMType.ACTIVE
-                and self._data.mechanism != "HOC")
+        return self._data.romtype == pfadef.ROMType.ACTIVE
 
     @property
     def _is_prom_centered(self):
@@ -616,7 +622,11 @@ class PlutoAPRomAssessmentStateMachine:
 
     def _handle_wait_to_move(self, event, dt):
         if self._is_arom_cycling:
-            self._instruction = "Move LEFT ◄ first, then cycle back and forth"
+            self._instruction = (
+                "Open the hand, then close — repeat"
+                if self._data.mechanism == "HOC"
+                else "Move LEFT ◄ first, then cycle back and forth"
+            )
             if event == pdef.PlutoEvents.NEWDATA:
                 # Start on position displacement, not speed, so a slow mover
                 # (never crossing the draw threshold) still begins cycling.
@@ -678,7 +688,12 @@ class PlutoAPRomAssessmentStateMachine:
     def _handle_cycling(self, event, dt):
         if event != pdef.PlutoEvents.NEWDATA:
             return
-        self._data.update_cycling_data(self._pluto.angle)
+        _pos = (
+            self._pluto.hocdisp
+            if self._data.mechanism == "HOC"
+            else self._pluto.angle
+        )
+        self._data.update_cycling_data(_pos)
         n = self._data._cycles_completed
         self._instruction = f"Keep cycling! {n}/{AROM.NO_OF_CYCLES} cycles done"
         if self._data.cycles_done:
@@ -690,9 +705,10 @@ class PlutoAPRomAssessmentStateMachine:
         if event != pdef.PlutoEvents.NEWDATA:
             return
         rp = self._data._rest_position
+        _unit = "cm" if self._data.mechanism == "HOC" else "deg"
         if self.subj_is_holding() and self.subj_in_rest_zone():
             self._statetimer -= dt
-            self._instruction = f"Hold for {self._statetimer:2.1f}s at rest ({rp:.1f} deg)"
+            self._instruction = f"Hold for {self._statetimer:2.1f}s at rest ({rp:.1f} {_unit})"
             if self._statetimer <= 0:
                 if not self._data.demomode:
                     self._data.set_rom()
@@ -700,7 +716,7 @@ class PlutoAPRomAssessmentStateMachine:
                 self._state = States.REST
         else:
             self._statetimer = AROM.REST_ZONE_HOLD_DURATION
-            self._instruction = f"Move to rest position ({rp:.1f} deg) and hold"
+            self._instruction = f"Move to rest position ({rp:.1f} {_unit}) and hold"
 
     def _handle_done(self, event, dt):
         pass
@@ -754,10 +770,15 @@ class PlutoAPRomAssessmentStateMachine:
         )
 
     def subj_in_rest_zone(self):
-        """Check if subject is within REST_ZONE_HALF_WIDTH of the rest position."""
+        """Check if subject is within the rest-zone half-width of the rest
+        position (HOC uses the cm twin and hocdisp)."""
         rp = self._data._rest_position
         if rp is None:
             return False
+        if self._data.mechanism == "HOC":
+            return bool(
+                np.abs(self._pluto.hocdisp - rp) <= AROM.REST_ZONE_HALF_WIDTH_HOC
+            )
         return bool(np.abs(self._pluto.angle - rp) <= AROM.REST_ZONE_HALF_WIDTH)
 
     # def trial_rom_outside_frobidden_zones(self):
@@ -876,6 +897,26 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
     def statemachine(self):
         return self._smachine
 
+    @property
+    def _is_hoc_cycling(self):
+        """HOC driven by the cycling engine (HOC + AROM/ACTIVE). PROM/APROM-HOC
+        stay on the old single-value path."""
+        return (
+            self.data.mechanism == "HOC"
+            and self.data.romtype == pfadef.ROMType.ACTIVE
+        )
+
+    def _xpos(self, pos):
+        """Map a mechanism position to an x-coordinate for drawing.
+
+        HOC pins the closed end (~0) to a corner by hand side: right hand ->
+        closed at the left corner (x = pos); left hand -> closed at the right
+        corner (x = MAXHOC - pos). Non-HOC uses the display sign."""
+        if self.data.mechanism == "HOC":
+            _is_left = str(self.data.limb).strip().lower() == "left"
+            return (AROM.MAXHOC - pos) if _is_left else pos
+        return self._dispsign * pos
+
     #
     # Update UI
     #
@@ -934,7 +975,16 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         if self.data.mechanism == "HOC":
             if self.pluto.hocdisp is None:
                 return
-            # Plot when there is data to be shown
+            if self._is_hoc_cycling:
+                # Single corner-anchored cursor line.
+                _x = self._xpos(self.pluto.hocdisp)
+                self.ui.currPosLine1.setData(
+                    [_x, _x],
+                    [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
+                )
+                self.ui.currPosLine2.setData([], [])
+                return
+            # PROM / APROM HOC — old symmetric two-line display.
             self.ui.currPosLine1.setData(
                 [self.pluto.hocdisp, self.pluto.hocdisp],
                 [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
@@ -998,7 +1048,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             )
 
     def _update_arom_cursor_position(self):
-        if self.data.mechanism == "HOC":
+        if self.data.mechanism == "HOC" and not self._is_hoc_cycling:
             if len(self.data._trialrom) > 1:
                 self.ui.romLine1.setData(
                     [-self.data._trialrom[-1], -self.data._trialrom[-1]],
@@ -1026,14 +1076,14 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             _dr = self.data._disp_right
             if _dl is not None:
                 self.ui.romLine1.setData(
-                    [self._dispsign * _dl, self._dispsign * _dl],
+                    [self._xpos(_dl), self._xpos(_dl)],
                     [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
                 )
             else:
                 self.ui.romLine1.setData([], [])
             if _dr is not None:
                 self.ui.romLine2.setData(
-                    [self._dispsign * _dr, self._dispsign * _dr],
+                    [self._xpos(_dr), self._xpos(_dr)],
                     [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
                 )
             else:
@@ -1045,8 +1095,8 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             _br = self.data.ghost_right
             if (self._smachine.state == States.WAIT_FOR_REST
                     and _bl is not None and _br is not None):
-                _l = self._dispsign * min(_bl, _br)
-                _r = self._dispsign * max(_bl, _br)
+                _l = min(self._xpos(_bl), self._xpos(_br))
+                _r = max(self._xpos(_bl), self._xpos(_br))
                 self.ui.romFill.setRect(_l, AROM.CURSOR_LOWER_LIMIT, _r - _l, _h)
             else:
                 self.ui.romFill.setRect(0, AROM.CURSOR_LOWER_LIMIT, 0, _h)
@@ -1111,22 +1161,23 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         ):
             if _i < len(_cycles):
                 _l, _r = _cycles[_i]
-                _ll.setData([self._dispsign * _l, self._dispsign * _l], _y)
-                _rl.setData([self._dispsign * _r, self._dispsign * _r], _y)
+                _ll.setData([self._xpos(_l), self._xpos(_l)], _y)
+                _rl.setData([self._xpos(_r), self._xpos(_r)], _y)
             else:
                 _ll.setData([], [])
                 _rl.setData([], [])
-        # Top-right readout: AROM (deg) per completed cycle.
+        # Top-right readout: ROM per completed cycle (cm for HOC, deg otherwise).
         if self.ui.cycleListText is not None:
+            _unit = "cm" if self.data.mechanism == "HOC" else "deg"
             _lines = [
-                f"Cycle {_i + 1}: {abs(_r - _l):.1f} deg"
+                f"Cycle {_i + 1}: {abs(_r - _l):.1f} {_unit}"
                 for _i, (_l, _r) in enumerate(_cycles)
             ]
             # Final AROM = best of last 3 cycles, shown only once cycling done.
             _bc = self.data.best_cycle
             if self.data.cycles_done and _bc is not None:
                 _lines.append("")
-                _lines.append(f"AROM: {abs(_bc[1] - _bc[0]):.1f} deg")
+                _lines.append(f"AROM: {abs(_bc[1] - _bc[0]):.1f} {_unit}")
             self.ui.cycleListText.setText("\n".join(_lines))
 
     def _update_rest_pos_line(self):
@@ -1134,15 +1185,20 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             return
         rp = self.data._rest_position
         _h = AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT
+        _hw = (
+            AROM.REST_ZONE_HALF_WIDTH_HOC
+            if self.data.mechanism == "HOC"
+            else AROM.REST_ZONE_HALF_WIDTH
+        )
         if rp is not None:
             self.ui.restPosLine.setData(
-                [self._dispsign * rp, self._dispsign * rp],
+                [self._xpos(rp), self._xpos(rp)],
                 [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
             )
             self.ui.restZoneFill.setRect(
-                self._dispsign * rp - AROM.REST_ZONE_HALF_WIDTH,
+                self._xpos(rp) - _hw,
                 AROM.CURSOR_LOWER_LIMIT,
-                2 * AROM.REST_ZONE_HALF_WIDTH,
+                2 * _hw,
                 _h,
             )
         else:
@@ -1208,10 +1264,14 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         self.ui.hocGraph.setLayout(_templayout)
         _pgobj.setYRange(-20, 20)
         if self.data.mechanism == "HOC":
-            _pgobj.setXRange(-10, 10)
+            # Cycling HOC: single corner-anchored axis 0..MAXHOC (small pad).
+            # PROM/APROM HOC: old symmetric axis about 0.
+            _range = (
+                [-0.5, AROM.MAXHOC + 0.5] if self._is_hoc_cycling else [-10, 10]
+            )
         else:
             _range = pdef.get_range_for_mechanism(self.data.mechanism)
-            _pgobj.setXRange(_range[0], _range[1])
+        _pgobj.setXRange(_range[0], _range[1])
         _pgobj.hideAxis("bottom")
         _pgobj.hideAxis("left")
         _pgobj.showGrid(x=False, y=False)
@@ -1230,9 +1290,9 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         _pgobj.addItem(self.ui.currPosLine1)
         _pgobj.addItem(self.ui.currPosLine2)
 
-        # ROM Lines — left=orange, right=blue (AROM cycling), both same for PROM/HOC
-        _arom_cycling = (self.data.romtype == pfadef.ROMType.ACTIVE
-                         and self.data.mechanism != "HOC")
+        # ROM Lines — left=orange, right=blue (AROM cycling, incl. HOC closed/
+        # open), both same pink for PROM/APROM.
+        _arom_cycling = self.data.romtype == pfadef.ROMType.ACTIVE
         _left_color  = "#FF8800" if _arom_cycling else "#FF8888"
         _right_color = "#0088FF" if _arom_cycling else "#FF8888"
         self.ui.romLine1 = pg.PlotDataItem(
@@ -1272,9 +1332,9 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         self.ui.strtZoneFill.setPen(pg.mkPen(None))  # No border
         _pgobj.addItem(self.ui.strtZoneFill)
 
-        # Rest position line (AROM non-HOC cycling only). Best-of-3 boundary is
+        # Rest position line (AROM cycling, incl. HOC). Best-of-3 boundary is
         # shown with romLine1/romLine2/romFill; no ghost or extension visuals.
-        if self.data.romtype == pfadef.ROMType.ACTIVE and self.data.mechanism != "HOC":
+        if self.data.romtype == pfadef.ROMType.ACTIVE:
             self.ui.restZoneFill = QGraphicsRectItem()
             self.ui.restZoneFill.setBrush(QColor(0, 255, 255, 40))
             self.ui.restZoneFill.setPen(pg.mkPen(None))
@@ -1314,8 +1374,13 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 self.ui.cycleLeftLines.append(_ll)
                 self.ui.cycleRightLines.append(_rl)
             # Direction indicator — shown once at first trial WAIT_TO_MOVE
+            _dirtext = (
+                "Open hand first"
+                if self.data.mechanism == "HOC"
+                else "◄ Move LEFT first"
+            )
             self.ui.dirIndicator = pg.TextItem(
-                text="◄ Move LEFT first", color="#FFFF00", anchor=(0.5, 0.5)
+                text=_dirtext, color="#FFFF00", anchor=(0.5, 0.5)
             )
             self.ui.dirIndicator.setPos(0, 0)
             self.ui.dirIndicator.setFont(QtGui.QFont("Cascadia Mono Light", 20))

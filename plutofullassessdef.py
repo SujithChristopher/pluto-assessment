@@ -260,6 +260,13 @@ class AROM(BaseConstants):
     CYCLING_HOLD_SAMPLES = 10  # samples averaged for cycling velocity estimate.
     CYCLING_REST_VEL_THRESHOLD = 1.0  # deg/s — at/below this = at rest; the rest position is marked as a boundary. Tunable.
     CYCLING_MIN_EXCURSION = 5.0  # deg — a rest must be this far from the last rest to count as a new extreme (rejects settle jitter / same-spot stops).
+    # HOC (cm) twins of the deg-based cycling constants. Used when the cycling
+    # engine drives the HOC mechanism (open/close cycling). Placeholders to be
+    # tuned on the device.
+    REST_ZONE_HALF_WIDTH_HOC = 0.5  # cm — half-width of the HOC rest zone.
+    CYCLING_REST_VEL_THRESHOLD_HOC = 0.5  # cm/s — at/below this = at rest (HOC).
+    CYCLING_MIN_EXCURSION_HOC = 0.5  # cm — distinct-rest threshold (HOC).
+    MAXHOC = 9.4  # cm — device full-open aperture (HOC far corner).
     SUMMARY_HEADER_CYCLING = [
         "session", "type", "limb", "mechanism",
         "trial", "last_cycle_left", "last_cycle_right",
