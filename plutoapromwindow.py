@@ -1382,7 +1382,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.ui.dirIndicator = pg.TextItem(
                 text=_dirtext, color="#FFFF00", anchor=(0.5, 0.5)
             )
-            self.ui.dirIndicator.setPos(0, 0)
+            self.ui.dirIndicator.setPos((_range[0] + _range[1]) / 2.0, 0)
             self.ui.dirIndicator.setFont(QtGui.QFont("Cascadia Mono Light", 20))
             self.ui.dirIndicator.setVisible(False)
             _pgobj.addItem(self.ui.dirIndicator)
@@ -1450,9 +1450,10 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             _pgobj.addItem(self.ui.aromPosLine1)
             _pgobj.addItem(self.ui.aromPosLine2)
 
-        # Instruction text
+        # Instruction text — centred on the axis (HOC axis is not symmetric
+        # about 0, so x=0 would sit at the left edge).
         self.ui.subjInst = pg.TextItem(text="", color="w", anchor=(0.5, 0.5))
-        self.ui.subjInst.setPos(0, 15)
+        self.ui.subjInst.setPos((_range[0] + _range[1]) / 2.0, 15)
         self.ui.subjInst.setFont(QtGui.QFont("Cascadia Mono Light", 14))
         _pgobj.addItem(self.ui.subjInst)
 
