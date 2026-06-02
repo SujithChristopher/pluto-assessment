@@ -132,6 +132,12 @@ class APRomData(object):
         )
 
     @property
+    def arom_center(self):
+        """Midpoint of the AROM range, or None if no AROM was provided."""
+        _a = self.arom
+        return None if _a is None else (_a[0] + _a[1]) / 2.0
+
+    @property
     def currtrial(self):
         return self._currtrial
 
@@ -452,6 +458,13 @@ class APRomData(object):
         self._startpos = float(self._trialdata["pos"][int(np.argmin(np.abs(self._trialdata["vel"])))])
         self._trialrom = [self._startpos]
 
+    def set_startpos_center(self):
+        """Pin the start position to the AROM centre (centred PROM). All zone
+        and validity logic then pivots on the AROM centre instead of the live
+        start position."""
+        self._startpos = float(self.arom_center)
+        self._trialrom = [self._startpos]
+
     def start_rawlogging(self):
         self._logstate = RawDataLoggingState.LOG_DATA
 
@@ -494,6 +507,14 @@ class PlutoAPRomAssessmentStateMachine:
     def _is_arom_cycling(self):
         return (self._data.romtype == pfadef.ROMType.ACTIVE
                 and self._data.mechanism != "HOC")
+
+    @property
+    def _is_prom_centered(self):
+        """PROM that is centred on the AROM centre: passive, non-HOC, and AROM
+        was completed (so an AROM range/centre is available)."""
+        return (self._data.romtype == pfadef.ROMType.PASSIVE
+                and self._data.mechanism != "HOC"
+                and self._data.arom is not None)
 
     @property
     def in_a_trial_state(self):
@@ -548,10 +569,20 @@ class PlutoAPRomAssessmentStateMachine:
             return
 
         # Wait for start.
-        if self._data.demomode:
-            self._instruction = f"Hold and press PLUTO Button to demo trial."
+        _centered = self._is_prom_centered
+        _center = self._data.arom_center
+        _trial_tag = (
+            "demo trial"
+            if self._data.demomode
+            else f"trial {self._data._currtrial + 1}/{self._data.ntrials}"
+        )
+        if _centered:
+            self._instruction = (
+                f"Move to centre ({_center:.1f} deg), hold and press PLUTO "
+                f"Button to start {_trial_tag}."
+            )
         else:
-            self._instruction = f"Hold and press PLUTO Button to start trial {self._data._currtrial + 1}/{self._data.ntrials}."
+            self._instruction = f"Hold and press PLUTO Button to start {_trial_tag}."
         if event == pdef.PlutoEvents.RELEASED:
             # Make sure the joint is in rest before we can swtich.
             if self.subj_is_holding():
@@ -564,7 +595,13 @@ class PlutoAPRomAssessmentStateMachine:
                     if not self._data.demomode:
                         self._data.start_rawlogging()
                 else:
-                    self._data.set_startpos()
+                    # Centred PROM must begin at the AROM centre — gate on it.
+                    if _centered and not self.subj_near_center():
+                        return
+                    if _centered:
+                        self._data.set_startpos_center()
+                    else:
+                        self._data.set_startpos()
                     self._trialrom = (
                         []
                         if self._data.mechanism != "HOC"
@@ -706,6 +743,16 @@ class PlutoAPRomAssessmentStateMachine:
                 < AROM.STOP_POS_NOT_HOC_THRESHOLD
             )
 
+    def subj_near_center(self):
+        """Check if the limb is held within the start zone around the AROM
+        centre (used to gate the start of a centred PROM trial)."""
+        c = self._data.arom_center
+        if c is None:
+            return False
+        return bool(
+            np.abs(self._pluto.angle - c) <= AROM.STOP_POS_NOT_HOC_THRESHOLD
+        )
+
     def subj_in_rest_zone(self):
         """Check if subject is within REST_ZONE_HALF_WIDTH of the rest position."""
         rp = self._data._rest_position
@@ -793,6 +840,13 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         # the trial is failed. MAX_FAILED_TRIALS failures terminate the AROM
         # assessment (which disables discrete reaching for this mechanism).
         self._is_arom = self.data.romtype == pfadef.ROMType.ACTIVE
+        # Centred PROM: passive, non-HOC, AROM completed — zones/validity pivot
+        # on the AROM centre and the trial must start there.
+        self._is_prom_centered = (
+            self.data.romtype == pfadef.ROMType.PASSIVE
+            and self.data.mechanism != "HOC"
+            and self.data.arom is not None
+        )
         self._failed_trials = 0
         self._trial_active = False
         self._trial_secs_left = AROM.TRIAL_TIME_LIMIT
@@ -873,6 +927,8 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self._update_arom_cursor_position()
         elif self._smachine.state == States.REST:
             self._reset_display()
+            if self._is_prom_centered:
+                self._draw_center_guide()
 
     def _update_current_position_cursor(self):
         if self.data.mechanism == "HOC":
@@ -898,6 +954,17 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 [self._dispsign * self.pluto.angle, self._dispsign * self.pluto.angle],
                 [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
             )
+
+    def _draw_center_guide(self):
+        """Show the start zone around the AROM centre during REST so the
+        assessor can move the limb into the gate before starting the trial."""
+        c = self.data.arom_center
+        if c is None:
+            return
+        _th = AROM.STOP_POS_NOT_HOC_THRESHOLD
+        _y = [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
+        self.ui.stopLine1.setData([self._dispsign * (c - _th)] * 2, _y)
+        self.ui.stopLine2.setData([self._dispsign * (c + _th)] * 2, _y)
 
     def _draw_stop_zone_lines(self):
         _th = (
