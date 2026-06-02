@@ -764,6 +764,25 @@ class PlutoAssessmentDetailsData(object):
         except KeyError:
             return pdef.get_range_for_mechanism(self._mech)
 
+    def get_arom_if_completed(self):
+        """Return the AROM ROM (best-of-3 averaged) only if AROM was actually
+        completed for the current mechanism. Returns None if AROM was skipped,
+        terminated, rejected, or never recorded — so callers (e.g. PROM) can
+        omit AROM-derived boundaries when the subject did not qualify."""
+        if self._mech is None:
+            raise ValueError("Mechanism not set. Cannot get AROM data.")
+        try:
+            _entry = self._val[self._mech]["tasks"]["AROM"][-1]
+        except (KeyError, IndexError):
+            return None
+        if _entry.get("status") != pfadef.AssessStatus.COMPLETE.value:
+            return None
+        _rom = _entry.get("rom")
+        # Valid ROM is a [min, max] pair (skipped trials leave nan/None).
+        if isinstance(_rom, (list, tuple)) and len(_rom) == 2:
+            return _rom
+        return None
+
     def get_prom(self):
         """Get the PROM data for the current mechanism."""
         if self._mech is None:

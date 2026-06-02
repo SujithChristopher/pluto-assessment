@@ -371,6 +371,13 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self._smachine.run_statemachine(Events.PROM_ASSESS, None)
         # Disable main controls
         self._maindisable = True
+        # PROM boundaries come from AROM (best-of-3) for all mechanisms except
+        # HOC. If AROM was skipped/terminated (subject did not qualify), no
+        # boundaries are shown. HOC keeps its existing behaviour.
+        if self.protocol.mech == "HOC":
+            _arom = self.data.detailedsummary.get_arom()
+        else:
+            _arom = self.data.detailedsummary.get_arom_if_completed()
         self._romwnd = PlutoAPRomAssessWindow(
             plutodev=self.pluto,
             assessinfo={
@@ -382,7 +389,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
                 "ntrials": self.protocol.get_no_of_trials(self.protocol.mech, "PROM"),
                 "rawfile": self.protocol.rawfilename,
                 "summaryfile": self.protocol.summaryfilename,
-                "arom": self.data.detailedsummary.get_arom(),
+                "arom": _arom,
             },
             modal=True,
             onclosecb=self._promwnd_close_event,
