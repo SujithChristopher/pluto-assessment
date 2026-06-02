@@ -106,7 +106,26 @@ etc.).
    branch, `is_trialrom_valid` HOC branch) is no longer reached by AROM-HOC.
    Leave it intact for PROM-HOC / APROM-HOC — verify those remain unchanged.
 
-### 5. Data output
+### 5. Per-trial time limit and failure handling (applies to AROM-HOC)
+
+The existing 60-second per-trial countdown and failure handling apply to
+AROM-HOC unchanged, because they are gated on `romtype == ACTIVE` only
+(`_is_arom`, mechanism-agnostic) — not on mechanism:
+
+- `AROM.TRIAL_TIME_LIMIT` (60 s) countdown shown on the top bar while a trial is
+  active.
+- On timeout the assessor chooses **Redo Trial** (no penalty) or **Next Trial**
+  (logs the trial as failed, increments the failure count).
+- After `AROM.MAX_FAILED_TRIALS` failures, AROM is terminated
+  (`_arom_skipped`), the task is reported `SKIPPED`, and **discrete reaching
+  (DISC) for HOC is disabled** via the same close-path comment used for non-HOC.
+- `write_failed_trial` must use the cycling (10-col) header for AROM-HOC — this
+  follows automatically from the gate change in touch-point 1/4.
+
+No new code is needed for the timer itself; the requirement is satisfied by the
+gate change. Verify the failed-trial row width matches the cycling header.
+
+### 6. Data output
 
 AROM-HOC summary switches to the 10-col cycling header:
 `session, type, limb, mechanism, trial, last_cycle_left, last_cycle_right,
@@ -123,6 +142,8 @@ Raw log is unchanged (already records both `angle` and `hocdisp`).
 
 - AROM-HOC: open/close cycling marks both extremes; 5 cycles; best-of-3 sets
   final ROM; single corner-anchored line; left vs right hand mirrors correctly.
+- AROM-HOC honours the 60 s per-trial window; repeated failures terminate AROM
+  and disable DISC for HOC; failed-trial row uses the cycling header.
 - PROM-HOC and APROM-HOC still use the old single-value path (no regression).
 - Non-HOC AROM unchanged.
 - Summary CSV for AROM-HOC has the 10 cycling columns in cm.
