@@ -171,21 +171,31 @@ class APRomData(object):
     def start_newtrial(self, reset: bool = False):
         """Start a new trial."""
         if self._currtrial < self.ntrials:
-            self._trialdata = {"dt": [], "pos": [], "vel": []}
-            self._trialrom = []
-            self._startpos = None
             self._currtrial = 0 if reset else self._currtrial + 1
-            # Reset cycling fields
-            self._cycle_left = None
-            self._cycle_right = None
-            self._rest_committed = False
-            self._last_rest_pos = None
-            self._cycle_history = []
-            self._all_cycles = []
-            self._cycles_completed = 0
-            self._rest_position = None
-            self._disp_left = None
-            self._disp_right = None
+            self._reset_trial_fields()
+
+    def redo_current_trial(self):
+        """Repeat the current trial (index unchanged) — clear its data only.
+        Used when a trial times out but the assessor wants to retry it (e.g. a
+        device/setup problem rather than a patient limitation)."""
+        self._reset_trial_fields()
+
+    def _reset_trial_fields(self):
+        """Clear all trial-local data (does not touch the trial index)."""
+        self._trialdata = {"dt": [], "pos": [], "vel": []}
+        self._trialrom = []
+        self._startpos = None
+        # Reset cycling fields
+        self._cycle_left = None
+        self._cycle_right = None
+        self._rest_committed = False
+        self._last_rest_pos = None
+        self._cycle_history = []
+        self._all_cycles = []
+        self._cycles_completed = 0
+        self._rest_position = None
+        self._disp_left = None
+        self._disp_right = None
 
     def add_newdata(self, dt, pos):
         """Add new data to the trial data."""
@@ -416,6 +426,27 @@ class APRomData(object):
                 ]
             )
 
+    def write_failed_trial(self):
+        """Log the current trial as failed ("did not qualify") when the trial
+        time limit expires. Mirrors set_rom's header choice so the row width
+        matches. No valid ROM is recorded for the trial."""
+        _dnq = "did not qualify"
+        if (self._assessinfo["romtype"] == pfadef.ROMType.ACTIVE
+                and self._assessinfo.get("mechanism") != "HOC"):
+            # Cycling header (10 cols)
+            self._summaryfilewriter.write_row([
+                self.session, self.type, self.limb, self.mechanism,
+                self.currtrial, _dnq, _dnq, _dnq, _dnq, self._cycles_completed,
+            ])
+        else:
+            # PROM / HOC header (9 cols)
+            self._summaryfilewriter.write_row([
+                self.session, self.type, self.limb, self.mechanism,
+                self.currtrial, self._startpos, _dnq, _dnq, _dnq,
+            ])
+        if 0 <= self._currtrial < self.ntrials:
+            self._rom[self._currtrial] = []
+
     def set_startpos(self):
         """Sets the start position at the sample of lowest velocity in the window."""
         self._startpos = float(self._trialdata["pos"][int(np.argmin(np.abs(self._trialdata["vel"])))])
@@ -479,6 +510,23 @@ class PlutoAPRomAssessmentStateMachine:
         self._statetimer = 0
         self._instruction = f""
         self._data.start_newtrial(reset=True)
+
+    def fail_current_trial(self):
+        """Abandon the current trial (time limit hit) and advance to the next.
+        The failed trial has already been logged by the window; here we just
+        move the trial index forward and return to REST."""
+        self._state = States.REST
+        self._statetimer = 0
+        self._instruction = f""
+        self._data.start_newtrial()
+
+    def redo_current_trial(self):
+        """Repeat the current trial (time limit hit but the assessor chose to
+        retry). Resets to REST without advancing the trial index."""
+        self._state = States.REST
+        self._statetimer = 0
+        self._instruction = f""
+        self._data.redo_current_trial()
 
     def run_statemachine(self, event, dt):
         """Execute the state machine depending on the given even that has occured."""
@@ -740,12 +788,22 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         # Attach callbacks
         self._attach_pluto_callbacks()
 
-        # Skip AROM button (ACTIVE romtype only)
-        if self.data.romtype == pfadef.ROMType.ACTIVE:
-            self.ui.pbSkipArom = QtWidgets.QPushButton("Skip AROM")
-            self.ui.pbSkipArom.setStyleSheet("color: rgb(200, 100, 0);")
-            self.ui.horizontalLayout.addWidget(self.ui.pbSkipArom)
-            self.ui.pbSkipArom.clicked.connect(self._callback_skip_arom_clicked)
+        # Per-trial time limit (AROM only). A wall-clock countdown is shown on
+        # the top bar; if a trial is not completed within AROM.TRIAL_TIME_LIMIT
+        # the trial is failed. MAX_FAILED_TRIALS failures terminate the AROM
+        # assessment (which disables discrete reaching for this mechanism).
+        self._is_arom = self.data.romtype == pfadef.ROMType.ACTIVE
+        self._failed_trials = 0
+        self._trial_active = False
+        self._trial_secs_left = AROM.TRIAL_TIME_LIMIT
+        if self._is_arom:
+            self.ui.lblCountdown = QtWidgets.QLabel("")
+            self.ui.lblCountdown.setStyleSheet("color: rgb(0, 170, 0);")
+            self.ui.lblCountdown.setFont(QtGui.QFont("Cascadia Mono Light", 16))
+            self.ui.horizontalLayout.addWidget(self.ui.lblCountdown)
+            self._trialtimer = QTimer()
+            self._trialtimer.timeout.connect(self._trial_timer_tick)
+            self._trialtimer.start(1000)
 
         # Attach control callbacks
         self.ui.cbTrialRun.clicked.connect(self._callback_trialrun_clicked)
@@ -790,13 +848,6 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
 
         # Update status message
         self.ui.lblStatus.setText(f"{self._smachine.state}")
-
-        # Skip AROM button state
-        if hasattr(self.ui, "pbSkipArom"):
-            self.ui.pbSkipArom.setEnabled(
-                self._smachine.state in (States.REST, States.WAIT_TO_MOVE, States.CYCLING, States.WAIT_FOR_REST)
-                and not self.data.all_trials_done
-            )
 
         # Close if needed
         if self._smachine.state == States.DONE:
@@ -1294,6 +1345,8 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         )
         # Run the statemachine
         self._smachine.run_statemachine(pdef.PlutoEvents.NEWDATA, dt=self.pluto.delt())
+        # Track the per-trial countdown window (AROM only).
+        self._update_trial_timer_state()
         # Update the GUI only at 1/10 the data rate
         if np.random.rand() < 0.05:
             self.update_ui()
@@ -1336,25 +1389,106 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             # Restart ROM assessment statemachine
             self._smachine.reset_statemachine()
 
-    def _callback_skip_arom_clicked(self):
-        reply = QtWidgets.QMessageBox.question(
-            self,
-            "Skip AROM",
-            "Skip AROM assessment?\nDiscrete reaching will be disabled for this mechanism.",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+    #
+    # Per-trial time limit
+    #
+    def _update_trial_timer_state(self):
+        """Arm the countdown when a trial begins (leaves REST) and disarm it
+        when the trial ends (returns to REST / DONE)."""
+        if not self._is_arom:
+            return
+        _in_trial = self._smachine.state not in (States.REST, States.DONE)
+        if _in_trial and not self._trial_active:
+            self._trial_active = True
+            self._trial_secs_left = AROM.TRIAL_TIME_LIMIT
+        elif not _in_trial and self._trial_active:
+            self._trial_active = False
+
+    def _trial_timer_tick(self):
+        """Tick once per second; count down only while a trial is active."""
+        if not self._trial_active:
+            self.ui.lblCountdown.setText("")
+            return
+        self._trial_secs_left -= 1
+        self.ui.lblCountdown.setText(f"{int(self._trial_secs_left)}s")
+        self.ui.lblCountdown.setStyleSheet(
+            "color: rgb(200, 0, 0);"
+            if self._trial_secs_left <= 10
+            else "color: rgb(0, 170, 0);"
         )
-        if reply == QtWidgets.QMessageBox.Yes:
+        if self._trial_secs_left <= 0:
+            self._handle_trial_timeout()
+
+    def _handle_trial_timeout(self):
+        """Trial time limit hit. The assessor chooses to redo the trial (e.g. a
+        device/setup problem) or move on. Moving on logs the trial as failed and
+        advances; MAX_FAILED_TRIALS failures terminate AROM (disabling discrete
+        reaching for this mechanism). Demo trials just restart.
+
+        Device callbacks are detached while the modal is open so streaming data
+        cannot finish or restart the trial underneath the dialog."""
+        self._trial_active = False
+        self.ui.lblCountdown.setText("")
+        self._detach_pluto_callbacks()
+        try:
+            # Demo / trial-run: don't penalise, just restart the demo trial.
+            if self.data.demomode:
+                self._smachine.reset_statemachine()
+                self.update_ui()
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Time up",
+                    "Demo trial time limit reached. Restarting demo.",
+                )
+                return
+            # Real trial — let the assessor redo it or move on.
+            box = QtWidgets.QMessageBox(self)
+            box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
+            box.setWindowTitle("Trial not completed")
+            box.setText(
+                "Trial not completed within the time limit.\n"
+                "Redo this trial, or move on to the next one?"
+            )
+            _redo = box.addButton(
+                "Redo Trial", QtWidgets.QMessageBox.ButtonRole.ActionRole
+            )
+            _next = box.addButton(
+                "Next Trial", QtWidgets.QMessageBox.ButtonRole.AcceptRole
+            )
+            box.setDefaultButton(_next)
+            box.exec()
+            if box.clickedButton() is _redo:
+                # Repeat the same trial; nothing logged, no failure counted.
+                self._smachine.redo_current_trial()
+                self.update_ui()
+                return
+            # Move on — log the trial as failed and advance.
+            self.data.write_failed_trial()
+            self._failed_trials += 1
+            self._smachine.fail_current_trial()
+            self.update_ui()
+        finally:
+            self._attach_pluto_callbacks()
+        # Too many failures — terminate AROM (skip path disables DISC).
+        if self._failed_trials >= AROM.MAX_FAILED_TRIALS:
             self._arom_skipped = True
             self.close()
 
     def closeEvent(self, event):
-        # Skip AROM was requested — bypass normal dialogs.
+        # Stop the per-trial countdown timer.
+        if self._is_arom and hasattr(self, "_trialtimer"):
+            self._trialtimer.stop()
+        # AROM terminated (too many failed trials) — bypass normal dialogs.
         if self._arom_skipped:
             data = {
                 "romval": self.data.rom,
                 "done": False,
                 "status": pfadef.AssessStatus.SKIPPED.value,
-                "taskcomment": "Skipped by assessor from ROM assessment window",
+                "taskcomment": (
+                    f"Patient unable to perform {self._failed_trials} trials "
+                    f"within {int(AROM.TRIAL_TIME_LIMIT)}s; AROM terminated, "
+                    f"discrete reaching disabled."
+                ),
             }
             if self.on_close_callback:
                 self.on_close_callback(data=data)
