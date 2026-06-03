@@ -719,21 +719,39 @@ class PlutoAPRomAssessmentStateMachine:
             self._state = States.WAIT_FOR_REST
 
     def _handle_wait_for_rest(self, event, dt):
+        # The 5 cycles are done and the clock is stopped — this rest-hold step
+        # is untimed. The assessor may finish the trial at any moment with the
+        # PLUTO button, or it completes after a brief hold inside the rest zone.
+        if event == pdef.PlutoEvents.RELEASED:
+            self._complete_cycling_trial()
+            return
         if event != pdef.PlutoEvents.NEWDATA:
             return
         rp = self._data._rest_position
         _unit = "cm" if self._data.mechanism == "HOC" else "deg"
         if self.subj_is_holding() and self.subj_in_rest_zone():
             self._statetimer -= dt
-            self._instruction = f"Hold for {self._statetimer:2.1f}s at rest ({rp:.1f} {_unit})"
+            self._instruction = (
+                f"Hold for {self._statetimer:2.1f}s at rest ({rp:.1f} {_unit}),"
+                f" or press the PLUTO Button"
+            )
             if self._statetimer <= 0:
-                if not self._data.demomode:
-                    self._data.set_rom()
-                    self._data.start_newtrial()
-                self._state = States.REST
+                self._complete_cycling_trial()
         else:
             self._statetimer = AROM.REST_ZONE_HOLD_DURATION
-            self._instruction = f"Move to rest position ({rp:.1f} {_unit}) and hold"
+            self._instruction = (
+                f"Move to rest position ({rp:.1f} {_unit}) and hold,"
+                f" or press the PLUTO Button"
+            )
+
+    def _complete_cycling_trial(self):
+        """Finalise the current cycling trial (5 cycles already done): log it
+        and advance. Demo trials are not logged."""
+        if not self._data.demomode:
+            self._data.set_rom()
+            self._data.start_newtrial()
+        self._state = States.REST
+        self._statetimer = 0
 
     def _handle_done(self, event, dt):
         pass
@@ -1623,7 +1641,15 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         when the trial ends (returns to REST / DONE)."""
         if not self._is_arom:
             return
-        _in_trial = self._smachine.state not in (States.REST, States.DONE)
+        # The per-trial clock covers only the cycling phase. Once the 5 cycles
+        # are done (WAIT_FOR_REST), the rest-hold is untimed and cannot
+        # time-fail — completing 5 cycles within the limit is the sole pass
+        # criterion.
+        _in_trial = self._smachine.state not in (
+            States.REST,
+            States.DONE,
+            States.WAIT_FOR_REST,
+        )
         if _in_trial and not self._trial_active:
             self._trial_active = True
             self._trial_secs_left = AROM.TRIAL_TIME_LIMIT
