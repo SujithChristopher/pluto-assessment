@@ -269,7 +269,7 @@ class PlutoAssistPRomAssessmentStateMachine:
             States.DIR1_TO_REST: "Relax and let the robot move you.",
             States.MOVING_DIR2: "Relax and let the robot move you.",
             States.DIR2_TO_REST: "Relax and let the robot move you.",
-            States.IN_STOPZONE: "Hold position in the stop zone.",
+            States.IN_STOPZONE: "Hold to complete the trial.",
             States.DONE: f"Assisted PROM {self._data.apromtype} assessment done.",
         }
         # Action handlers
@@ -382,16 +382,14 @@ class PlutoAssistPRomAssessmentStateMachine:
     def _handle_dir1_to_rest(self, event, dt) -> Actions:
         if event == pdef.PlutoEvents.NEWDATA:
             self._statetimer -= dt
-            # Nothing to do if the subject is moving.
-            if self.subj_is_holding() is False:
-                return Actions.DO_NOTHING
-        # PLUTO button release event
+        # PLUTO button release event. Switching to direction 2 no longer
+        # requires returning to the centre/start zone (kept inconsistent with
+        # the AROM/PROM flow otherwise) — the duration timer + assessor button
+        # press alone advance to direction 2.
         if self._statetimer < 0 and event == pdef.PlutoEvents.RELEASED:
-            # Subject is holding within from start.
-            if self.subj_in_the_stop_zone():
-                self._state = States.TORQ_DIR2
-                self._statetimer = 0.5
-                return Actions.TORQ_TGT_DIR2
+            self._state = States.TORQ_DIR2
+            self._statetimer = 0.5
+            return Actions.TORQ_TGT_DIR2
         return Actions.DO_NOTHING
 
     def _handle_torq_dir2(self, event, dt) -> Actions:
@@ -429,15 +427,17 @@ class PlutoAssistPRomAssessmentStateMachine:
         return Actions.DO_NOTHING
 
     def _handle_dir2_to_rest(self, event, dt) -> Actions:
-        self._instruction = f"Move to the starting zone and hold."
-        # PLUTO new data event
+        self._instruction = f"Come to rest and hold to complete the trial."
+        # PLUTO new data event. Completion no longer requires returning to the
+        # centre/start zone — the subject may stop anywhere. Coming to rest
+        # (holding) after the duration is enough to enter the hold-to-complete.
         if event == pdef.PlutoEvents.NEWDATA:
             self._statetimer -= dt
             # Nothing to do if the subject is moving.
             if self.subj_is_holding() is False:
                 return Actions.DO_NOTHING
-            # Subject is holding within from start.
-            if self._statetimer < 0 and self.subj_in_the_stop_zone():
+            # Subject has come to rest (anywhere).
+            if self._statetimer < 0:
                 self._statetimer = pfadef.APROM.STOP_ZONE_DURATION_THRESHOLD
                 self._state = States.IN_STOPZONE
                 return Actions.DO_NOTHING
@@ -564,19 +564,6 @@ class PlutoAssistPRomAssessmentStateMachine:
                 np.abs(self._pluto.angle - self._data.startpos)
                 > pfadef.BaseConstants.START_POS_NOT_HOC_THRESHOLD
             )
-
-    def subj_in_the_stop_zone(self):
-        """Check if the subject is in the stop zone."""
-        if self._data.mechanism == "HOC":
-            return (
-                self._pluto.hocdisp - self._data.startpos
-            ) < pfadef.BaseConstants.STOP_POS_HOC_THRESHOLD
-        else:
-            return (
-                np.abs(self._pluto.angle - self._data.startpos)
-                < pfadef.BaseConstants.STOP_POS_NOT_HOC_THRESHOLD
-            )
-
 
 class PlutoAssistPRomAssessWindow(QtWidgets.QMainWindow):
     """
@@ -715,12 +702,25 @@ class PlutoAssistPRomAssessWindow(QtWidgets.QMainWindow):
     def _update_visual_feedabck(self):
         self._update_current_position_cursor()
         if self._smachine.in_a_trial_state:
-            self._draw_stop_zone_lines()
-            self._highlight_start_zone()
+            # After the trial starts there is no start/stop-zone reference any
+            # more — only the boundary envelope (and the live cursor).
+            self._clear_start_stop_visuals()
             self._update_aprom_cursor_position()
         elif self._smachine.state == States.REST:
             # Reset arom cursor position.
             self._reset_display()
+
+    def _clear_start_stop_visuals(self):
+        """Hide the start/stop-zone lines and the start-zone fill."""
+        self.ui.stopLine1.setData([], [])
+        self.ui.stopLine2.setData([], [])
+        self.ui.strtZoneFill.setRect(
+            0,
+            pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
+            0,
+            pfadef.BaseConstants.CURSOR_UPPER_LIMIT
+            - pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
+        )
 
     def _update_current_position_cursor(self):
         if self.data.mechanism == "HOC":
@@ -753,49 +753,6 @@ class PlutoAssistPRomAssessWindow(QtWidgets.QMainWindow):
             )
             self.ui.currPosLine2.setData(
                 [self._dispsign * self.pluto.angle, self._dispsign * self.pluto.angle],
-                [
-                    pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
-                    pfadef.BaseConstants.CURSOR_UPPER_LIMIT,
-                ],
-            )
-
-    def _draw_stop_zone_lines(self):
-        _th = (
-            pfadef.BaseConstants.STOP_POS_HOC_THRESHOLD
-            if self.data.mechanism == "HOC"
-            else pfadef.BaseConstants.STOP_POS_NOT_HOC_THRESHOLD
-        )
-        if self.data.mechanism == "HOC":
-            self.ui.stopLine1.setData(
-                [self.data.startpos + _th, self.data.startpos + _th],
-                [
-                    pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
-                    pfadef.BaseConstants.CURSOR_UPPER_LIMIT,
-                ],
-            )
-            self.ui.stopLine2.setData(
-                [-self.data.startpos - _th, -self.data.startpos - _th],
-                [
-                    pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
-                    pfadef.BaseConstants.CURSOR_UPPER_LIMIT,
-                ],
-            )
-        else:
-            self.ui.stopLine1.setData(
-                [
-                    self._dispsign * (self.data.startpos - _th),
-                    self._dispsign * (self.data.startpos - _th),
-                ],
-                [
-                    pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
-                    pfadef.BaseConstants.CURSOR_UPPER_LIMIT,
-                ],
-            )
-            self.ui.stopLine2.setData(
-                [
-                    self._dispsign * (self.data.startpos + _th),
-                    self._dispsign * (self.data.startpos + _th),
-                ],
                 [
                     pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
                     pfadef.BaseConstants.CURSOR_UPPER_LIMIT,
@@ -876,40 +833,6 @@ class PlutoAssistPRomAssessWindow(QtWidgets.QMainWindow):
                 - pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
             )
 
-    def _highlight_start_zone(self):
-        if len(self.data._trialrom) == 0:
-            return
-        # Fill the start zone
-        if self._smachine.state == States.IN_STOPZONE:
-            if self.data.mechanism == "HOC":
-                self.ui.strtZoneFill.setRect(
-                    -self.data.startpos - pfadef.BaseConstants.STOP_POS_HOC_THRESHOLD,
-                    pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
-                    2
-                    * (
-                        self.data.startpos + pfadef.BaseConstants.STOP_POS_HOC_THRESHOLD
-                    ),
-                    pfadef.BaseConstants.CURSOR_UPPER_LIMIT
-                    - pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
-                )
-            else:
-                self.ui.strtZoneFill.setRect(
-                    self._dispsign * self.data.startpos
-                    - pfadef.BaseConstants.STOP_POS_NOT_HOC_THRESHOLD,
-                    pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
-                    2 * pfadef.BaseConstants.STOP_POS_NOT_HOC_THRESHOLD,
-                    pfadef.BaseConstants.CURSOR_UPPER_LIMIT
-                    - pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
-                )
-        else:
-            self.ui.strtZoneFill.setRect(
-                0,
-                pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
-                0,
-                pfadef.BaseConstants.CURSOR_UPPER_LIMIT
-                - pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
-            )
-
     def _reset_display(self):
         # Reset ROM display
         self.ui.romLine1.setData(
@@ -934,21 +857,9 @@ class PlutoAssistPRomAssessWindow(QtWidgets.QMainWindow):
             pfadef.BaseConstants.CURSOR_UPPER_LIMIT
             - pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
         )
-        # Reset stop zone.
-        self.ui.stopLine1.setData(
-            [0, 0],
-            [
-                pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
-                pfadef.BaseConstants.CURSOR_UPPER_LIMIT,
-            ],
-        )
-        self.ui.stopLine2.setData(
-            [0, 0],
-            [
-                pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
-                pfadef.BaseConstants.CURSOR_UPPER_LIMIT,
-            ],
-        )
+        # Stop-zone lines are no longer used — keep them hidden.
+        self.ui.stopLine1.setData([], [])
+        self.ui.stopLine2.setData([], [])
         self.ui.strtZoneFill.setRect(
             0,
             pfadef.BaseConstants.CURSOR_LOWER_LIMIT,
