@@ -413,6 +413,10 @@ class PlutoPositionHoldAssessWindow(QtWidgets.QMainWindow):
         self.ui = Ui_PosHoldAssessWindow()
         self.ui.setupUi(self)
 
+        # The .ui locks the window to a fixed 522x451; clear the min/max so it
+        # can maximise like the other assessment windows.
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(16777215, 16777215)
         # Remove hocGraph fixed size so it expands with the window
         self.ui.hocGraph.setMaximumSize(16777215, 16777215)
 
