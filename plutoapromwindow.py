@@ -258,7 +258,13 @@ class APRomData(object):
             if self.mechanism == "HOC"
             else AROM.STOP_POS_NOT_HOC_THRESHOLD
         )
-        if self.mechanism == "HOC":
+        # Centred PROM (passive + AROM available) is two-sided about the AROM
+        # centre for every mechanism, HOC included. Non-centred HOC keeps its
+        # one-sided (open-only) check.
+        _centered = (
+            self.romtype == pfadef.ROMType.PASSIVE and self.arom is not None
+        )
+        if self.mechanism == "HOC" and not _centered:
             return self._trialrom[-1] - self._startpos > _th
         else:
             return (
@@ -516,11 +522,28 @@ class PlutoAPRomAssessmentStateMachine:
 
     @property
     def _is_prom_centered(self):
-        """PROM that is centred on the AROM centre: passive, non-HOC, and AROM
-        was completed (so an AROM range/centre is available)."""
+        """PROM that is centred on the AROM centre: passive and AROM was
+        completed (so an AROM range/centre is available). Applies to every
+        mechanism, HOC included."""
         return (self._data.romtype == pfadef.ROMType.PASSIVE
-                and self._data.mechanism != "HOC"
                 and self._data.arom is not None)
+
+    def _pos(self):
+        """Live mechanism position (cm for HOC, deg otherwise)."""
+        return (
+            self._pluto.hocdisp
+            if self._data.mechanism == "HOC"
+            else self._pluto.angle
+        )
+
+    @property
+    def _center_threshold(self):
+        """Start-gate / stop-zone half-width in the mechanism's units."""
+        return (
+            AROM.STOP_POS_HOC_THRESHOLD
+            if self._data.mechanism == "HOC"
+            else AROM.STOP_POS_NOT_HOC_THRESHOLD
+        )
 
     @property
     def in_a_trial_state(self):
@@ -582,9 +605,10 @@ class PlutoAPRomAssessmentStateMachine:
             if self._data.demomode
             else f"trial {self._data._currtrial + 1}/{self._data.ntrials}"
         )
+        _unit = "cm" if self._data.mechanism == "HOC" else "deg"
         if _centered:
             self._instruction = (
-                f"Move to centre ({_center:.1f} deg), hold and press PLUTO "
+                f"Move to centre ({_center:.1f} {_unit}), hold and press PLUTO "
                 f"Button to start {_trial_tag}."
             )
         else:
@@ -608,13 +632,6 @@ class PlutoAPRomAssessmentStateMachine:
                         self._data.set_startpos_center()
                     else:
                         self._data.set_startpos()
-                    self._trialrom = (
-                        []
-                        if self._data.mechanism != "HOC"
-                        else [
-                            0,
-                        ]
-                    )
                     self._state = States.WAIT_TO_MOVE
                     self._statetimer = 0
                     if not self._data.demomode:
@@ -749,6 +766,10 @@ class PlutoAPRomAssessmentStateMachine:
 
     def subj_in_the_stop_zone(self):
         """Check if the subject is in the stop zone."""
+        # Centred PROM stops in a band around the AROM centre (two-sided) for
+        # every mechanism. Non-centred HOC keeps its one-sided check.
+        if self._is_prom_centered:
+            return bool(np.abs(self._pos() - self._data.startpos) < self._center_threshold)
         if self._data.mechanism == "HOC":
             return (
                 self._pluto.hocdisp - self._data.startpos
@@ -765,9 +786,7 @@ class PlutoAPRomAssessmentStateMachine:
         c = self._data.arom_center
         if c is None:
             return False
-        return bool(
-            np.abs(self._pluto.angle - c) <= AROM.STOP_POS_NOT_HOC_THRESHOLD
-        )
+        return bool(np.abs(self._pos() - c) <= self._center_threshold)
 
     def subj_in_rest_zone(self):
         """Check if subject is within the rest-zone half-width of the rest
@@ -861,13 +880,6 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         # the trial is failed. MAX_FAILED_TRIALS failures terminate the AROM
         # assessment (which disables discrete reaching for this mechanism).
         self._is_arom = self.data.romtype == pfadef.ROMType.ACTIVE
-        # Centred PROM: passive, non-HOC, AROM completed — zones/validity pivot
-        # on the AROM centre and the trial must start there.
-        self._is_prom_centered = (
-            self.data.romtype == pfadef.ROMType.PASSIVE
-            and self.data.mechanism != "HOC"
-            and self.data.arom is not None
-        )
         self._failed_trials = 0
         self._trial_active = False
         self._trial_secs_left = AROM.TRIAL_TIME_LIMIT
@@ -904,6 +916,16 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         return (
             self.data.mechanism == "HOC"
             and self.data.romtype == pfadef.ROMType.ACTIVE
+        )
+
+    @property
+    def _is_prom_centered(self):
+        """Centred PROM: passive and AROM completed (range/centre available),
+        for every mechanism including HOC. Drives the single-line centred
+        display, the AROM/resting reference lines, and the centre start gate."""
+        return (
+            self.data.romtype == pfadef.ROMType.PASSIVE
+            and self.data.arom is not None
         )
 
     def _xpos(self, pos):
@@ -966,17 +988,21 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self._draw_stop_zone_lines()
             self._highlight_start_zone()
             self._update_arom_cursor_position()
+            if self._is_prom_centered:
+                self._draw_center_rest_line()
         elif self._smachine.state == States.REST:
             self._reset_display()
             if self._is_prom_centered:
                 self._draw_center_guide()
+                self._draw_center_rest_line()
 
     def _update_current_position_cursor(self):
         if self.data.mechanism == "HOC":
             if self.pluto.hocdisp is None:
                 return
-            if self._is_hoc_cycling:
-                # Single corner-anchored cursor line.
+            if self._is_hoc_cycling or self._is_prom_centered:
+                # Single corner-anchored cursor line (cycling AROM and centred
+                # PROM both use the 0..MAXHOC view).
                 _x = self._xpos(self.pluto.hocdisp)
                 self.ui.currPosLine1.setData(
                     [_x, _x],
@@ -984,7 +1010,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 )
                 self.ui.currPosLine2.setData([], [])
                 return
-            # PROM / APROM HOC — old symmetric two-line display.
+            # PROM / APROM HOC (no AROM) — old symmetric two-line display.
             self.ui.currPosLine1.setData(
                 [self.pluto.hocdisp, self.pluto.hocdisp],
                 [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
@@ -1011,10 +1037,35 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         c = self.data.arom_center
         if c is None:
             return
-        _th = AROM.STOP_POS_NOT_HOC_THRESHOLD
+        _th = (
+            AROM.STOP_POS_HOC_THRESHOLD
+            if self.data.mechanism == "HOC"
+            else AROM.STOP_POS_NOT_HOC_THRESHOLD
+        )
         _y = [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
-        self.ui.stopLine1.setData([self._dispsign * (c - _th)] * 2, _y)
-        self.ui.stopLine2.setData([self._dispsign * (c + _th)] * 2, _y)
+        self.ui.stopLine1.setData([self._xpos(c - _th)] * 2, _y)
+        self.ui.stopLine2.setData([self._xpos(c + _th)] * 2, _y)
+
+    def _draw_center_rest_line(self):
+        """Persistent resting/centre reference for centred PROM: a solid cyan
+        line at the AROM centre with a shaded rest band, shown through REST and
+        the trial states. Works for every mechanism via _xpos."""
+        if self.ui.restPosLine is None:
+            return
+        c = self.data.arom_center
+        if c is None:
+            return
+        _hw = (
+            AROM.REST_ZONE_HALF_WIDTH_HOC
+            if self.data.mechanism == "HOC"
+            else AROM.REST_ZONE_HALF_WIDTH
+        )
+        _h = AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT
+        _xc = self._xpos(c)
+        self.ui.restPosLine.setData(
+            [_xc, _xc], [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
+        )
+        self.ui.restZoneFill.setRect(_xc - _hw, AROM.CURSOR_LOWER_LIMIT, 2 * _hw, _h)
 
     def _draw_stop_zone_lines(self):
         _th = (
@@ -1022,6 +1073,14 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             if self.data.mechanism == "HOC"
             else AROM.STOP_POS_NOT_HOC_THRESHOLD
         )
+        # Centred PROM: a symmetric band about the AROM centre (= startpos),
+        # mapped through _xpos so HOC and non-HOC share one path.
+        if self._is_prom_centered:
+            _sp = self.data.startpos
+            _y = [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT]
+            self.ui.stopLine1.setData([self._xpos(_sp - _th)] * 2, _y)
+            self.ui.stopLine2.setData([self._xpos(_sp + _th)] * 2, _y)
+            return
         if self.data.mechanism == "HOC":
             self.ui.stopLine1.setData(
                 [self.data.startpos + _th, self.data.startpos + _th],
@@ -1048,7 +1107,11 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             )
 
     def _update_arom_cursor_position(self):
-        if self.data.mechanism == "HOC" and not self._is_hoc_cycling:
+        if (
+            self.data.mechanism == "HOC"
+            and not self._is_hoc_cycling
+            and not self._is_prom_centered
+        ):
             if len(self.data._trialrom) > 1:
                 self.ui.romLine1.setData(
                     [-self.data._trialrom[-1], -self.data._trialrom[-1]],
@@ -1102,10 +1165,11 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 self.ui.romFill.setRect(0, AROM.CURSOR_LOWER_LIMIT, 0, _h)
             return
 
-        # PROM / HOC fallback
+        # PROM / HOC fallback (incl. centred PROM). _xpos handles the HOC
+        # corner anchoring and reduces to _dispsign*x for the other mechanisms.
         if len(self.data._trialrom) == 0:
             return
-        _romdisp = sorted(self._dispsign * x for x in self.data._trialrom)
+        _romdisp = sorted(self._xpos(x) for x in self.data._trialrom)
         self.ui.romLine1.setData(
             [_romdisp[0], _romdisp[0]],
             [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
@@ -1126,7 +1190,22 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             return
         # Fill the start zone
         if self._smachine.state == States.HOLDING_IN_STOP_ZONE:
-            if self.data.mechanism == "HOC":
+            if self._is_prom_centered:
+                # Band about the AROM centre (= startpos), mapped via _xpos.
+                _th = (
+                    AROM.STOP_POS_HOC_THRESHOLD
+                    if self.data.mechanism == "HOC"
+                    else AROM.STOP_POS_NOT_HOC_THRESHOLD
+                )
+                _sp = self.data.startpos
+                _x0 = min(self._xpos(_sp - _th), self._xpos(_sp + _th))
+                self.ui.strtZoneFill.setRect(
+                    _x0,
+                    AROM.CURSOR_LOWER_LIMIT,
+                    2 * _th,
+                    AROM.CURSOR_UPPER_LIMIT - AROM.CURSOR_LOWER_LIMIT,
+                )
+            elif self.data.mechanism == "HOC":
                 self.ui.strtZoneFill.setRect(
                     -self.data.startpos - AROM.STOP_POS_HOC_THRESHOLD,
                     AROM.CURSOR_LOWER_LIMIT,
@@ -1264,10 +1343,12 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         self.ui.hocGraph.setLayout(_templayout)
         _pgobj.setYRange(-20, 20)
         if self.data.mechanism == "HOC":
-            # Cycling HOC: single corner-anchored axis 0..MAXHOC (small pad).
-            # PROM/APROM HOC: old symmetric axis about 0.
+            # Corner-anchored axis 0..MAXHOC for cycling AROM and centred PROM;
+            # old symmetric axis about 0 for plain (no-AROM) HOC PROM/APROM.
             _range = (
-                [-0.5, AROM.MAXHOC + 0.5] if self._is_hoc_cycling else [-10, 10]
+                [-0.5, AROM.MAXHOC + 0.5]
+                if (self._is_hoc_cycling or self._is_prom_centered)
+                else [-10, 10]
             )
         else:
             _range = pdef.get_range_for_mechanism(self.data.mechanism)
@@ -1401,8 +1482,6 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.ui.currPosLine2.setZValue(7)
             self.ui.dirIndicator.setZValue(8)
         else:
-            self.ui.restZoneFill = None
-            self.ui.restPosLine = None
             self.ui.ghostLeftLine = None
             self.ui.ghostRightLine = None
             self.ui.extFillLeft = None
@@ -1411,20 +1490,38 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.ui.cycleListText = None
             self.ui.cycleLeftLines = []
             self.ui.cycleRightLines = []
+            # Centred PROM shows a persistent resting (centre) line + band;
+            # plain PROM has neither.
+            if self._is_prom_centered:
+                self.ui.restZoneFill = QGraphicsRectItem()
+                self.ui.restZoneFill.setBrush(QColor(0, 255, 255, 40))
+                self.ui.restZoneFill.setPen(pg.mkPen(None))
+                _pgobj.addItem(self.ui.restZoneFill)
+                self.ui.restPosLine = pg.PlotDataItem(
+                    [], [], pen=pg.mkPen(color="#00FFFF", width=3),
+                )
+                _pgobj.addItem(self.ui.restPosLine)
+                self.ui.romFill.setZValue(1)
+                self.ui.restZoneFill.setZValue(3)
+                self.ui.romLine1.setZValue(5)
+                self.ui.romLine2.setZValue(5)
+                self.ui.restPosLine.setZValue(6)
+                self.ui.currPosLine1.setZValue(7)
+                self.ui.currPosLine2.setZValue(7)
+            else:
+                self.ui.restZoneFill = None
+                self.ui.restPosLine = None
 
         # Angle display sign for the limb.
         self._dispsign = 1.0
 
-        # AROM lines when appropriate.
+        # AROM lines when appropriate. Centred PROM (incl. HOC) maps both AROM
+        # boundaries through _xpos; plain HOC PROM keeps the mirrored display.
         if self.data.arom is not None:
-            _pos = (
-                [-self.data.arom[1], -self.data.arom[1]]
-                if self.data.mechanism == "HOC"
-                else [
-                    self._dispsign * self.data.arom[0],
-                    self._dispsign * self.data.arom[0],
-                ]
-            )
+            if self.data.mechanism == "HOC" and not self._is_prom_centered:
+                _pos = [-self.data.arom[1], -self.data.arom[1]]
+            else:
+                _pos = [self._xpos(self.data.arom[0])] * 2
             self.ui.aromPosLine1 = pg.PlotDataItem(
                 _pos,
                 [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
@@ -1432,14 +1529,10 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                     color="#1EFF00", width=1, style=QtCore.Qt.PenStyle.DotLine
                 ),
             )
-            _pos = (
-                [self.data.arom[1], self.data.arom[1]]
-                if self.data.mechanism == "HOC"
-                else [
-                    self._dispsign * self.data.arom[1],
-                    self._dispsign * self.data.arom[1],
-                ]
-            )
+            if self.data.mechanism == "HOC" and not self._is_prom_centered:
+                _pos = [self.data.arom[1], self.data.arom[1]]
+            else:
+                _pos = [self._xpos(self.data.arom[1])] * 2
             self.ui.aromPosLine2 = pg.PlotDataItem(
                 _pos,
                 [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
