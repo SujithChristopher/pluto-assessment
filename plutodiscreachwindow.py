@@ -114,14 +114,13 @@ class DiscreteReachData(object):
 
     @property
     def target1(self):
-        if self.mechanism == "HOC":
-            return 0.0  # home/center = relaxing position
+        # Interpolated within the AROM/PROM range for every mechanism (HOC
+        # included) — the start target is NOT the fully-closed device zero,
+        # since the patient may not start from a fully closed position.
         return DiscreteReach.TGT1_POSITION * self.aromrange + self.arom[0]
 
     @property
     def target2(self):
-        if self.mechanism == "HOC":
-            return DiscreteReach.TGT2_POSITION * self.arom[1]
         return DiscreteReach.TGT2_POSITION * self.aromrange + self.arom[0]
 
     @property
@@ -812,6 +811,18 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
     def statemachine(self):
         return self._smachine
 
+    def _xpos(self, pos):
+        """Map a mechanism position to an x-coordinate for drawing.
+
+        HOC pins the closed end (~0) to a corner by hand side: right hand ->
+        closed at the left corner (x = pos); left hand -> closed at the right
+        corner (x = MAXHOC - pos), so the reach direction follows the hand
+        being assessed. Non-HOC uses the display sign."""
+        if self.data.mechanism == "HOC":
+            _is_left = str(self.data.limb).strip().lower() == "left"
+            return (pfadef.AROM.MAXHOC - pos) if _is_left else pos
+        return self._dispsign * pos
+
     #
     # Update UI
     #
@@ -851,15 +862,13 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
         if self.data.mechanism == "HOC":
             if self.pluto.hocdisp is None:
                 return
-            # Plot when there is data to be shown
+            # Single corner-anchored cursor line (no mirror twin).
+            _x = self._xpos(self.pluto.hocdisp)
             self.ui.currPosLine1.setData(
-                [self.pluto.hocdisp, self.pluto.hocdisp],
+                [_x, _x],
                 [DiscreteReach.CURSOR_LOWER_LIMIT, DiscreteReach.CURSOR_UPPER_LIMIT],
             )
-            self.ui.currPosLine2.setData(
-                [-self.pluto.hocdisp, -self.pluto.hocdisp],
-                [DiscreteReach.CURSOR_LOWER_LIMIT, DiscreteReach.CURSOR_UPPER_LIMIT],
-            )
+            self.ui.currPosLine2.setData([], [])
         else:
             if self.pluto.angle is None:
                 return
@@ -945,8 +954,8 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
         _aromdisp.sort()
         _pgobj.setYRange(-30, 30)
         if self.data.mechanism == "HOC":
-            _arom_max = max(abs(self.data.arom[0]), abs(self.data.arom[1]))
-            _pgobj.setXRange(-_arom_max, _arom_max)
+            # Single corner-anchored axis 0..MAXHOC (matches AROM/PROM).
+            _pgobj.setXRange(-0.5, pfadef.AROM.MAXHOC + 0.5)
         else:
             _pgobj.setXRange(_aromdisp[0], _aromdisp[1])
         _pgobj.getAxis("bottom").setStyle(showValues=False)
@@ -957,7 +966,7 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
         self.ui.tgt1.setBrush(DiscreteReach.HIDE_COLOR)
         self.ui.tgt1.setPen(pg.mkPen(None))
         self.ui.tgt1.setRect(
-            self._dispsign * self.data.target1
+            self._xpos(self.data.target1)
             - 0.5 * DiscreteReach.TGT_WIDTH * self.data.aromrange,
             DiscreteReach.CURSOR_LOWER_LIMIT,
             DiscreteReach.TGT_WIDTH * self.data.aromrange,
@@ -970,7 +979,7 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
         self.ui.tgt2.setBrush(DiscreteReach.HIDE_COLOR)
         self.ui.tgt2.setPen(pg.mkPen(None))
         self.ui.tgt2.setRect(
-            self._dispsign * self.data.target2
+            self._xpos(self.data.target2)
             - 0.5 * DiscreteReach.TGT_WIDTH * self.data.aromrange,
             DiscreteReach.CURSOR_LOWER_LIMIT,
             DiscreteReach.TGT_WIDTH * self.data.aromrange,
@@ -978,18 +987,12 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
         )
         _pgobj.addItem(self.ui.tgt2)
 
-        # Target2 mirror box (HOC only — symmetric left-side reach target)
+        # Legacy HOC mirror target — kept as an (unset, invisible) item so the
+        # state-display code can still reference it, but never drawn now that
+        # HOC uses the single corner-anchored axis.
         self.ui.tgt2_mirror = QGraphicsRectItem()
         self.ui.tgt2_mirror.setBrush(DiscreteReach.HIDE_COLOR)
         self.ui.tgt2_mirror.setPen(pg.mkPen(None))
-        if self.data.mechanism == "HOC":
-            self.ui.tgt2_mirror.setRect(
-                -self.data.target2
-                - 0.5 * DiscreteReach.TGT_WIDTH * self.data.aromrange,
-                DiscreteReach.CURSOR_LOWER_LIMIT,
-                DiscreteReach.TGT_WIDTH * self.data.aromrange,
-                DiscreteReach.CURSOR_UPPER_LIMIT - DiscreteReach.CURSOR_LOWER_LIMIT,
-            )
         _pgobj.addItem(self.ui.tgt2_mirror)
 
         # Current position lines
@@ -1006,8 +1009,12 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
         _pgobj.addItem(self.ui.currPosLine1)
         _pgobj.addItem(self.ui.currPosLine2)
 
-        # Instruction text
-        _text_x = 0 if self.data.mechanism == "HOC" else _aromdisp[0] + 0.5 * self.data.aromrange
+        # Instruction text — centred on the axis (HOC axis spans 0..MAXHOC).
+        _text_x = (
+            pfadef.AROM.MAXHOC / 2.0
+            if self.data.mechanism == "HOC"
+            else _aromdisp[0] + 0.5 * self.data.aromrange
+        )
         self.ui.subjInst = pg.TextItem(text="", color="w", anchor=(0.5, 0.5))
         self.ui.subjInst.setPos(_text_x, 25)  # Set position (x, y)
         self.ui.subjInst.setFont(QtGui.QFont("Cascadia Mono", 12))
@@ -1023,14 +1030,14 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
         # Target 1
         self.ui.tgt1Text = pg.TextItem(text="", color="w", anchor=(0.5, 0.5))
         self.ui.tgt1Text.setPos(
-            self._dispsign * self.data.target1, 14
+            self._xpos(self.data.target1), 14
         )  # Set position (x, y)
         self.ui.tgt1Text.setFont(QtGui.QFont("Cascadia Mono", 10))
         _pgobj.addItem(self.ui.tgt1Text)
         # Target 2
         self.ui.tgt2Text = pg.TextItem(text="", color="w", anchor=(0.5, 0.5))
         self.ui.tgt2Text.setPos(
-            self._dispsign * self.data.target2, 14
+            self._xpos(self.data.target2), 14
         )  # Set position (x, y)
         self.ui.tgt2Text.setFont(QtGui.QFont("Cascadia Mono", 10))
         _pgobj.addItem(self.ui.tgt2Text)
