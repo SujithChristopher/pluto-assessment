@@ -72,10 +72,13 @@ class APRomData(object):
         self._rest_position = None
         self._disp_left = None            # left boundary for display
         self._disp_right = None           # right boundary for display
-        # HOC cycling: which boundary is currently being marked
-        # ("OPENING"/"CLOSING"), switched by a position threshold. Cycles are
-        # built only from measured movement extremes (start is never marked).
+        # Cycling: which side is currently being marked, switched by a position
+        # threshold. _lo/_hi hold the measured low/high extremes of the pending
+        # cycle (non-HOC pairing). Cycles are built only from measured movement
+        # extremes — the start/centre is never marked.
         self._active_side = None
+        self._lo = None
+        self._hi = None
         # Logging variables
         self._logstate: RawDataLoggingState = RawDataLoggingState.WAIT_FOR_LOG
         self._rawfilewriter: misc.CSVBufferWriter = misc.CSVBufferWriter(
@@ -206,6 +209,8 @@ class APRomData(object):
         self._disp_left = None
         self._disp_right = None
         self._active_side = None
+        self._lo = None
+        self._hi = None
 
     def add_newdata(self, dt, pos):
         """Add new data to the trial data."""
@@ -356,116 +361,95 @@ class APRomData(object):
                 return True
         return False
 
-    def update_cycling_data(self, pos) -> bool:
-        """Rest-driven boundary marking (nothing is drawn while moving).
+    def _record_cycle(self) -> bool:
+        """Record the current (low, high) extreme pair as a completed cycle and
+        arm the next pair. Both extremes are measured movement extremes."""
+        self._cycles_completed += 1
+        _cyc = (self._lo, self._hi)
+        self._cycle_history.append(_cyc)
+        self._all_cycles.append(_cyc)
+        if len(self._cycle_history) > 3:
+            self._cycle_history.pop(0)
+        self._lo = None
+        self._hi = None
+        return True
 
-        Like the ui-refinement "hold to mark" approach: movement alone draws
-        nothing. A boundary is marked only when the subject comes to rest
-        (|vel| <= CYCLING_REST_VEL_THRESHOLD, ~0 deg/s) — the rest position is
-        recorded as that side's extreme.
+    def _update_cycling_nonhoc(self, pos) -> bool:
+        """Non-HOC AROM cycling (FPS / WFE / WURD): back-and-forth about the
+        centre, same principle as HOC (see _update_cycling_hoc).
 
-        Velocity is used only to detect rest (|vel| <= threshold), never to
-        infer direction (which made slow movement messy). At rest:
-          - Extension: if the current position is farther out than the side's
-            existing mark, push that mark outward. This runs continuously while
-            at rest, so a slow creep toward the extreme keeps extending the
-            boundary instead of stalling.
-          - Seeding: a distinct new rest (>= CYCLING_MIN_EXCURSION from the
-            last rest) seeds the side it falls on (left/right of the last rest)
-            if not yet marked this cycle.
-        Cycle completion is deferred: a cycle is not closed when the second
-        (right) extreme is first marked — that would freeze the right extreme
-        instantly while the left one had a window to grow. Instead both extremes
-        stay live (and keep extending) until the subject reverses back toward
-        the start with a new distinct LEFT rest, which closes the cycle and
-        seeds the next one. Returns True on that cycle-closing reversal.
-
-        HOC uses _update_cycling_hoc (threshold-switched active boundary)."""
-        if self.mechanism == "HOC":
-            return self._update_cycling_hoc(pos)
-
+        The extreme VALUE is marked by the velocity/rest rule (updated only
+        while at rest); which side is active flips by a position threshold
+        reversal from the current extreme (no rest required). Both extremes lie
+        on opposite sides of the centre (the start), which is never itself a
+        boundary. A cycle = one low-side extreme + one high-side extreme, both
+        measured; it is counted when the second of the pair is finalized, so it
+        is robust to which side the subject moves to first. Returns True on the
+        cycle-counting reversal."""
         if not self._trialdata["vel"]:
             return False
-
         _n = AROM.CYCLING_HOLD_SAMPLES
         vel_mean = float(np.mean(self._trialdata["vel"][-_n:]))
-        _is_hoc = self.mechanism == "HOC"
-        _rest_th = (
-            AROM.CYCLING_REST_VEL_THRESHOLD_HOC
-            if _is_hoc
-            else AROM.CYCLING_REST_VEL_THRESHOLD
-        )
-        _min_excursion = (
-            AROM.CYCLING_MIN_EXCURSION_HOC
-            if _is_hoc
-            else AROM.CYCLING_MIN_EXCURSION
-        )
+        _rest_th = AROM.CYCLING_REST_VEL_THRESHOLD
+        _switch_th = AROM.CYCLING_MIN_EXCURSION
+        _at_rest = abs(vel_mean) <= _rest_th
 
-        # Moving: draw nothing, just re-arm the next rest event.
-        if abs(vel_mean) > _rest_th:
-            self._rest_committed = False
+        # Seed the first active side from the first rested movement away from the
+        # centre (dead zone = switch threshold). The centre is never marked.
+        if self._active_side is None:
+            if _at_rest and abs(pos - self._startpos) >= _switch_th:
+                if pos >= self._startpos:
+                    self._active_side = "HI"
+                    self._cycle_right = pos
+                    self._disp_right = pos
+                else:
+                    self._active_side = "LO"
+                    self._cycle_left = pos
+                    self._disp_left = pos
             return False
 
-        # At rest — extend the current extremes outward if beaten (continuous,
-        # so slow creep keeps growing the boundary).
-        if self._cycle_left is not None and pos < self._cycle_left:
-            self._cycle_left = pos
-            self._disp_left = pos
-        if self._cycle_right is not None and pos > self._cycle_right:
-            self._cycle_right = pos
-            self._disp_right = pos
-
-        # Only seed a side / segment a cycle once per distinct rest event.
-        if self._rest_committed:
-            return False
-        self._rest_committed = True
-        _ref = self._last_rest_pos if self._last_rest_pos is not None else self._startpos
-        if _ref is None or abs(pos - _ref) < _min_excursion:
-            # Same spot / jitter — not a distinct new extreme.
-            return False
-        self._last_rest_pos = pos
-        # Side from displacement since the last rest (LEFT = back toward the
-        # start/first-move direction; RIGHT = the far extreme).
-        _is_left = pos < _ref
-        _both_marked = (
-            self._cycle_left is not None and self._cycle_right is not None
-        )
-
-        # Deferred completion: once both extremes are marked, the cycle is NOT
-        # closed yet. The far (right) extreme stays alive so a further push out
-        # keeps extending it — symmetric with how the left extreme could grow
-        # before the right was marked. The cycle is finalized only when the
-        # subject reverses back toward the start (a new distinct LEFT rest),
-        # which simultaneously seeds the next cycle's left extreme.
-        if _both_marked:
-            if _is_left:
-                self._cycles_completed += 1
-                self._cycle_history.append((self._cycle_left, self._cycle_right))
-                self._all_cycles.append((self._cycle_left, self._cycle_right))
-                if len(self._cycle_history) > 3:
-                    self._cycle_history.pop(0)
+        if self._active_side == "HI":
+            # Track the high-side extreme only at rest.
+            if _at_rest and (self._cycle_right is None or pos > self._cycle_right):
+                self._cycle_right = pos
+                self._disp_right = pos
+            # Reversed below the high extreme past the threshold -> it is final.
+            if self._cycle_right is not None and pos < self._cycle_right - _switch_th:
+                self._hi = self._cycle_right
+                self._active_side = "LO"
+                if self._lo is not None:
+                    # Pair complete: count, then start the low side fresh here.
+                    self._cycle_left = pos
+                    self._disp_left = pos
+                    return self._record_cycle()
+                self._cycle_left = None
+                self._disp_left = None
+        else:  # LO
+            # Track the low-side extreme only at rest.
+            if _at_rest and (self._cycle_left is None or pos < self._cycle_left):
+                self._cycle_left = pos
+                self._disp_left = pos
+            # Reversed above the low extreme past the threshold -> it is final.
+            if self._cycle_left is not None and pos > self._cycle_left + _switch_th:
+                self._lo = self._cycle_left
+                self._active_side = "HI"
+                if self._hi is not None:
+                    self._cycle_right = pos
+                    self._disp_right = pos
+                    return self._record_cycle()
                 self._cycle_right = None
                 self._disp_right = None
-                self._cycle_left = pos
-                self._disp_left = pos
-                return True
-            # Still pushing further out on the far side — extend it.
-            if pos > self._cycle_right:
-                self._cycle_right = pos
-                self._disp_right = pos
-            return False
-
-        # Not both marked yet — seed (or extend) the side this rest falls on.
-        if _is_left:
-            if self._cycle_left is None or pos < self._cycle_left:
-                self._cycle_left = pos
-                self._disp_left = pos
-        else:
-            if self._cycle_right is None or pos > self._cycle_right:
-                self._cycle_right = pos
-                self._disp_right = pos
-
         return False
+
+    def update_cycling_data(self, pos) -> bool:
+        """Cycling boundary marking, routed by mechanism. HOC opens from a
+        closed start (_update_cycling_hoc); FPS/WFE/WURD oscillate about a centre
+        (_update_cycling_nonhoc). Both build cycles only from measured movement
+        extremes — the start/centre is never a boundary — with the extreme value
+        marked at rest and the active side switched by a position threshold."""
+        if self.mechanism == "HOC":
+            return self._update_cycling_hoc(pos)
+        return self._update_cycling_nonhoc(pos)
 
     @property
     def all_cycles(self):
