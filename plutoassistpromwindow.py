@@ -51,6 +51,7 @@ class Actions(Enum):
     TORQ_TGT_DIR2 = 3
     TORQ_TGT_ZERO = 4
     DO_NOTHING = 5
+    TORQ_TGT_RAMP = 6  # ramp the torque 0 -> target, then hold
 
 
 class AssistPRomData(object):
@@ -249,6 +250,10 @@ class PlutoAssistPRomAssessmentStateMachine:
         self._instruction = f""
         self._instdisp = instdisp
         self._pluto = plutodev
+        # Torque ramp state: direction of the current ramp (+/- target) and the
+        # last target value actually sent (to throttle serial traffic).
+        self._ramp_dir = 0.0
+        self._last_sent_target = None
         self._stateactions = {
             States.REST: self._handle_rest,
             States.TORQ_DIR1: self._handle_torq_dir1,
@@ -279,6 +284,7 @@ class PlutoAssistPRomAssessmentStateMachine:
             Actions.TORQ_TGT_DIR1: self._act_torq_tgt_dir1,
             Actions.TORQ_TGT_DIR2: self._act_torq_tgt_dir2,
             Actions.TORQ_TGT_ZERO: self._act_torq_tgt_zero,
+            Actions.TORQ_TGT_RAMP: self._act_torq_tgt_ramp,
             Actions.DO_NOTHING: self._act_do_nothing,
         }
         # Start a new trial.
@@ -350,25 +356,26 @@ class PlutoAssistPRomAssessmentStateMachine:
             self._statetimer -= dt
             if self._statetimer > 0:
                 return Actions.DO_NOTHING
+            # Begin the direction-1 torque ramp (0 -> TORQUE_DIR1).
             self._state = States.MOVING_DIR1
             self._statetimer = self._data.duration
-            return Actions.TORQ_TGT_DIR1
+            self._ramp_dir = pfadef.APROM.TORQUE_DIR1
+            self._last_sent_target = None
+            return Actions.TORQ_TGT_RAMP
 
     def _handle_moving_dir1(self, event, dt) -> Actions:
-        # New data event
+        # New data event — keep ramping the assist torque, record ROM while held.
         if event == pdef.PlutoEvents.NEWDATA:
             self._statetimer -= dt
-            # Nothing to do if the subject is moving.
-            if self.subj_is_holding() is False:
-                return Actions.DO_NOTHING
-            # Subject is holdin away from start.
-            # Add the current position to trial ROM.
-            _ = self._data.add_new_trialrom_data()
+            if self.subj_is_holding():
+                # Subject is held by the (ramping) torque — record ROM.
+                _ = self._data.add_new_trialrom_data()
+            return Actions.TORQ_TGT_RAMP
         # PLUTO button release event
         if self._statetimer < 0 and event == pdef.PlutoEvents.RELEASED:
             # Nothing to do if the subject is moving.
             if self.subj_is_holding() is False:
-                return Actions.DO_NOTHING
+                return Actions.TORQ_TGT_RAMP
             # Subject is holdin away from start.
             # Add the current position to trial ROM.
             _ = self._data.add_new_trialrom_data()
@@ -397,26 +404,27 @@ class PlutoAssistPRomAssessmentStateMachine:
             self._statetimer -= dt
             if self._statetimer > 0:
                 return Actions.DO_NOTHING
+            # Begin the direction-2 torque ramp (0 -> TORQUE_DIR2).
             self._state = States.MOVING_DIR2
             self._statetimer = self._data.duration
-            return Actions.TORQ_TGT_DIR2
+            self._ramp_dir = pfadef.APROM.TORQUE_DIR2
+            self._last_sent_target = None
+            return Actions.TORQ_TGT_RAMP
         return Actions.DO_NOTHING
 
     def _handle_moving_dir2(self, event, dt) -> Actions:
-        # New data event
+        # New data event — keep ramping the assist torque, record ROM while held.
         if event == pdef.PlutoEvents.NEWDATA:
             self._statetimer -= dt
-            # Nothing to do if the subject is moving.
-            if self.subj_is_holding() is False:
-                return Actions.DO_NOTHING
-            # Subject is holdin away from start.
-            # Add the current position to trial ROM.
-            _ = self._data.add_new_trialrom_data()
+            if self.subj_is_holding():
+                # Subject is held by the (ramping) torque — record ROM.
+                _ = self._data.add_new_trialrom_data()
+            return Actions.TORQ_TGT_RAMP
         # PLUTO button release event
         if self._statetimer < 0 and event == pdef.PlutoEvents.RELEASED:
             # Nothing to do if the subject is moving.
             if self.subj_is_holding() is False:
-                return Actions.DO_NOTHING
+                return Actions.TORQ_TGT_RAMP
             # Subject is holdin away from start.
             # Add the current position to trial ROM.
             _ = self._data.add_new_trialrom_data()
@@ -497,9 +505,27 @@ class PlutoAssistPRomAssessmentStateMachine:
         )
 
     def _act_torq_tgt_zero(self):
+        self._last_sent_target = None
         if self._tgt_set(0):
             return
         self._pluto.set_control_target(target=0)
+
+    def _act_torq_tgt_ramp(self):
+        """Ramp the torque target from 0 to self._ramp_dir over RAMP_DURATION,
+        then hold. elapsed = duration - statetimer, so the ramp completes at
+        RAMP_DURATION and is held for the remaining HOLD_DURATION. Sends are
+        throttled to ~0.02 N steps to avoid flooding the serial link."""
+        if not self._ctrl_is_torqlinear():
+            self._pluto.set_control_type("TORQUE")
+        _elapsed = self._data.duration - self._statetimer
+        _frac = min(1.0, max(0.0, _elapsed / pfadef.APROM.RAMP_DURATION))
+        _tgt = self._ramp_dir * _frac
+        if (
+            self._last_sent_target is None
+            or abs(_tgt - self._last_sent_target) >= 0.02
+        ):
+            self._pluto.set_control_target(target=_tgt)
+            self._last_sent_target = _tgt
 
     def _act_do_nothing(self):
         pass
@@ -1152,8 +1178,8 @@ if __name__ == "__main__":
             "ntrials": 1,
             "rawfile": "rawfiletest.csv",
             "summaryfile": "summaryfiletest.csv",
-            "duration": pfadef.get_task_constants("APROMSLOW").DURATION,
-            "apromtype": "Slow",
+            "duration": pfadef.get_task_constants("APROM").DURATION,
+            "apromtype": pfadef.APROM.APROMTYPE,
         },
         dataviewer=True,
         onclosecb=lambda data: print(f"ROM set: {data}"),

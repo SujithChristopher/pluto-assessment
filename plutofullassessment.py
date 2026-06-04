@@ -158,10 +158,8 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self.pbAROMSkip.clicked.connect(self._callback_skip_arom)
         self.pbPROM.clicked.connect(self._callback_assess_prom)
         self.pbPROMSkip.clicked.connect(self._callback_skip_prom)
-        self.pbAPROMSlow.clicked.connect(self._callback_assess_apromslow)
-        self.pbAPROMSlowSkip.clicked.connect(self._callback_skip_apromslow)
-        self.pbAPROMFast.clicked.connect(self._callback_assess_apromfast)
-        self.pbAPROMFastSkip.clicked.connect(self._callback_skip_apromfast)
+        self.pbAPROMSlow.clicked.connect(self._callback_assess_aprom)
+        self.pbAPROMSlowSkip.clicked.connect(self._callback_skip_aprom)
         self.pbPosHold.clicked.connect(self._callback_poshold)
         self.pbPosHoldSkip.clicked.connect(self._callback_skip_poshold)
         self.pbDiscReach.clicked.connect(self._callback_disc_reach)
@@ -408,9 +406,9 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             )
         self.update_ui()
 
-    def _callback_assess_apromslow(self):
+    def _callback_assess_aprom(self):
         # Run the state machine.
-        self._smachine.run_statemachine(Events.APROMSLOW_ASSESS, None)
+        self._smachine.run_statemachine(Events.APROM_ASSESS, None)
         # Disable main controls
         self._maindisable = True
         self._romwnd = PlutoAssistPRomAssessWindow(
@@ -421,71 +419,30 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
                 "mechanism": self.protocol.mech,
                 "session": self.data.session,
                 "ntrials": self.protocol.get_no_of_trials(
-                    self.protocol.mech, "APROMSLOW"
+                    self.protocol.mech, "APROM"
                 ),
                 "rawfile": self.protocol.rawfilename,
                 "summaryfile": self.protocol.summaryfilename,
                 "arom": self.data.detailedsummary.get_arom(),
-                "duration": pfadef.get_task_constants("APROMSLOW").DURATION,
-                "apromtype": "Slow",
+                "duration": pfadef.get_task_constants("APROM").DURATION,
+                "apromtype": pfadef.APROM.APROMTYPE,
             },
             modal=True,
-            onclosecb=self._apromslowwnd_close_event,
+            onclosecb=self._apromwnd_close_event,
         )
         self._romwnd.show()
         self._currwndclosed = False
 
-    def _callback_skip_apromslow(self):
+    def _callback_skip_aprom(self):
         # Check if the chosen mechanism is already assessed.
         _comment = MechTaskSkipDialog(
-            label=f"Sure you want to skip APROM Slow? If so give the reason.",
+            label=f"Sure you want to skip Assisted PROM? If so give the reason.",
         )
         if _comment.exec() == QtWidgets.QDialog.Accepted:
             _skipcomment = _comment.getText()
             # Run the state machine.
             self._smachine.run_statemachine(
-                Events.APROMSLOW_SKIP,
-                {"comment": _skipcomment, "session": self.data.session},
-            )
-        self.update_ui()
-
-    def _callback_assess_apromfast(self):
-        # Run the state machine.
-        self._smachine.run_statemachine(Events.APROMFAST_ASSESS, None)
-        # Disable main controls
-        self._maindisable = True
-        self._romwnd = PlutoAssistPRomAssessWindow(
-            plutodev=self.pluto,
-            assessinfo={
-                "type": self.data.type,
-                "limb": self.data.limb,
-                "mechanism": self.protocol.mech,
-                "session": self.data.session,
-                "ntrials": self.protocol.get_no_of_trials(
-                    self.protocol.mech, "APROMFAST"
-                ),
-                "rawfile": self.protocol.rawfilename,
-                "summaryfile": self.protocol.summaryfilename,
-                "arom": self.data.detailedsummary.get_arom(),
-                "duration": pfadef.get_task_constants("APROMFAST").DURATION,
-                "apromtype": "Fast",
-            },
-            modal=True,
-            onclosecb=self._apromfastwnd_close_event,
-        )
-        self._romwnd.show()
-        self._currwndclosed = False
-
-    def _callback_skip_apromfast(self):
-        # Check if the chosen mechanism is already assessed.
-        _comment = MechTaskSkipDialog(
-            label=f"Sure you want to skip APROM Fast? If so give the reason.",
-        )
-        if _comment.exec() == QtWidgets.QDialog.Accepted:
-            _skipcomment = _comment.getText()
-            # Run the state machine.
-            self._smachine.run_statemachine(
-                Events.APROMFAST_SKIP,
+                Events.APROM_SKIP,
                 {"comment": _skipcomment, "session": self.data.session},
             )
         self.update_ui()
@@ -1051,7 +1008,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self._currwndclosed = True
         self.update_ui()
 
-    def _apromslowwnd_close_event(self, data):
+    def _apromwnd_close_event(self, data):
         # Check if the window is already closed.
         if self._currwndclosed is True:
             self._romwnd = None
@@ -1060,31 +1017,9 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         # Run the state machine.
         task_completed = data["status"] == pfadef.AssessStatus.COMPLETE.value
         self._smachine.run_statemachine(
-            (Events.APROMSLOW_DONE if task_completed else Events.APROMSLOW_REJECT)
+            (Events.APROM_DONE if task_completed else Events.APROM_REJECT)
             if data["done"]
-            else Events.APROMSLOW_NO_DONE,
-            data,
-        )
-        # Reenable main controls
-        self._maindisable = False
-        # Update the Table.
-        self._updatetable = True
-        # Set the window closed flag.
-        self._currwndclosed = True
-        self.update_ui()
-
-    def _apromfastwnd_close_event(self, data):
-        # Check if the window is already closed.
-        if self._currwndclosed is True:
-            self._romwnd = None
-            return
-        # Window not closed.
-        # Run the state machine.
-        task_completed = data["status"] == pfadef.AssessStatus.COMPLETE.value
-        self._smachine.run_statemachine(
-            (Events.APROMFAST_DONE if task_completed else Events.APROMFAST_REJECT)
-            if data["done"]
-            else Events.APROMFAST_NO_DONE,
+            else Events.APROM_NO_DONE,
             data,
         )
         # Reenable main controls
@@ -1397,8 +1332,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _tctrl = {
             "AROM": [self.pbAROM, self.pbAROMSkip],
             "PROM": [self.pbPROM, self.pbPROMSkip],
-            "APROMSLOW": [self.pbAPROMSlow, self.pbAPROMSlowSkip],
-            "APROMFAST": [self.pbAPROMFast, self.pbAPROMFastSkip],
+            "APROM": [self.pbAPROMSlow, self.pbAPROMSlowSkip],
             "POSHOLD": [self.pbPosHold, self.pbPosHoldSkip],
             "DISC": [self.pbDiscReach, self.pbDiscReachSkip],
             "PROP": [self.pbProp, self.pbPropSkip],

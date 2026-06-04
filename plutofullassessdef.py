@@ -72,8 +72,7 @@ MECH_LABELS = {
 ALLTASKS = [
     "AROM",
     "PROM",
-    "APROMSLOW",
-    "APROMFAST",
+    "APROM",
     "DISC",
     "POSHOLD",
     "PROP",
@@ -86,8 +85,7 @@ ALLTASKS = [
 TASK_LABELS = {
     "AROM": "Active ROM",
     "PROM": "Passive ROM",
-    "APROMSLOW": "Assisted Pasive ROM (Slow)",
-    "APROMFAST": "Assisted Pasive ROM (Fast)",
+    "APROM": "Assisted Passive ROM",
     "DISC": "Discrete Reaching",
     "POSHOLD": "Position Hold",
     "PROP": "Proprioceptiion",
@@ -102,11 +100,11 @@ TASK_LABELS = {
 # after the first list tasks are completed, but in a random order. When one of
 # the lists is empty, it means that there are no tasks to be done in that order.
 MECH_TASKS = {
-    "FPS": [["AROM", "PROM", "APROMSLOW", "APROMFAST"], ["POSHOLD", "DISC"]],
-    "WFE": [["AROM", "PROM", "APROMSLOW", "APROMFAST", "DISC"], []],
-    "WURD": [["AROM", "PROM", "APROMSLOW", "APROMFAST", "DISC"], []],
+    "FPS": [["AROM", "PROM", "APROM"], ["POSHOLD", "DISC"]],
+    "WFE": [["AROM", "PROM", "APROM", "DISC"], []],
+    "WURD": [["AROM", "PROM", "APROM", "DISC"], []],
     "HOC": [
-        ["AROM", "PROM", "APROMSLOW", "APROMFAST"],
+        ["AROM", "PROM", "APROM"],
         ['DISC']
         # ["PROP"],
         # ["FCTRLLOW", "FCTRLMED", "FCTRLHIGH"],
@@ -115,8 +113,7 @@ MECH_TASKS = {
 TASK_DEPENDENCIES = {
     "AROM": {"in_subjtypes": ["stroke"], "in_unaffected": False, "depends_on": []},
     "PROM": {"in_subjtypes": ["stroke"], "in_unaffected": False, "depends_on": []},
-    "APROMSLOW": {"in_subjtypes": ["stroke"], "in_unaffected": False, "depends_on": []},
-    "APROMFAST": {"in_subjtypes": ["stroke"], "in_unaffected": False, "depends_on": []},
+    "APROM": {"in_subjtypes": ["stroke"], "in_unaffected": False, "depends_on": []},
     "DISC": {
         "in_subjtypes": ["stroke", "healthy"],
         "in_unaffected": True,
@@ -291,6 +288,13 @@ class APROM(BaseConstants):
     TORQUE_DIR1 = +1.0  # Toque to apply in direction 1
     TORQUE_DIR2 = -1.0  # Toque to apply in direction 2
     NO_OF_TRIALS = 3  # Number of trials
+    APROMTYPE = "Assisted"  # Single assisted-PROM type (slow/fast merged).
+    # Torque is ramped from 0 to the target over RAMP_DURATION, then held at the
+    # target for HOLD_DURATION. DURATION = RAMP_DURATION + HOLD_DURATION is the
+    # total torque-application time per direction.
+    RAMP_DURATION = 2.5  # seconds — 0 -> target ramp ("ramp wave").
+    HOLD_DURATION = 0.5  # seconds — hold at target after the ramp.
+    DURATION = 3.0  # seconds — total torque application per direction.
 
     # Data logging constants
     RAW_HEADER = [
@@ -332,20 +336,6 @@ class APROM(BaseConstants):
         "torqdir2",
         "duration",
     ]
-
-
-#
-# Assisted Passive Range of Motion Constants (Slow)
-#
-class APROMSlow(APROM):
-    DURATION = 05.0  # Duration of torque application (seconds).
-
-
-#
-# Assisted Passive Range of Motion Constants (Fast)
-#
-class APROMFast(APROM):
-    DURATION = 02.0  # Duration of torque application (seconds).
 
 
 #
@@ -607,10 +597,8 @@ def get_task_constants(task):
         return AROM()
     elif task == "PROM":
         return PROM()
-    elif task == "APROMSLOW":
-        return APROMSlow()
-    elif task == "APROMFAST":
-        return APROMFast()
+    elif task == "APROM":
+        return APROM()
     elif task == "POSHOLD":
         return PositionHold()
     elif task == "DISC":

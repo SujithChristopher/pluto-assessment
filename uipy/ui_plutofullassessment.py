@@ -283,27 +283,6 @@ class Ui_PlutoFullAssessor(object):
 
         self.verticalLayout.addLayout(self.horizontalLayout_7)
 
-        self.horizontalLayout_8 = QHBoxLayout()
-        self.horizontalLayout_8.setSpacing(0)
-        self.horizontalLayout_8.setObjectName(u"horizontalLayout_8")
-        self.pbAPROMFast = QPushButton(self.centralwidget)
-        self.pbAPROMFast.setObjectName(u"pbAPROMFast")
-        self.pbAPROMFast.setEnabled(False)
-        self.pbAPROMFast.setFont(font)
-        self.pbAPROMFast.setStyleSheet(u"")
-
-        self.horizontalLayout_8.addWidget(self.pbAPROMFast)
-
-        self.pbAPROMFastSkip = QPushButton(self.centralwidget)
-        self.pbAPROMFastSkip.setObjectName(u"pbAPROMFastSkip")
-        self.pbAPROMFastSkip.setEnabled(False)
-        self.pbAPROMFastSkip.setMaximumSize(QSize(30, 16777215))
-
-        self.horizontalLayout_8.addWidget(self.pbAPROMFastSkip)
-
-
-        self.verticalLayout.addLayout(self.horizontalLayout_8)
-
         self.horizontalLayout_9 = QHBoxLayout()
         self.horizontalLayout_9.setSpacing(0)
         self.horizontalLayout_9.setObjectName(u"horizontalLayout_9")
@@ -560,10 +539,8 @@ class Ui_PlutoFullAssessor(object):
         self.pbAROMSkip.setText(QCoreApplication.translate("PlutoFullAssessor", u"X", None))
         self.pbPROM.setText(QCoreApplication.translate("PlutoFullAssessor", u"Assess PROM", None))
         self.pbPROMSkip.setText(QCoreApplication.translate("PlutoFullAssessor", u"X", None))
-        self.pbAPROMSlow.setText(QCoreApplication.translate("PlutoFullAssessor", u"Assisted Pasive ROM (Slow)", None))
+        self.pbAPROMSlow.setText(QCoreApplication.translate("PlutoFullAssessor", u"Assisted Passive ROM", None))
         self.pbAPROMSlowSkip.setText(QCoreApplication.translate("PlutoFullAssessor", u"X", None))
-        self.pbAPROMFast.setText(QCoreApplication.translate("PlutoFullAssessor", u"Assisted Pasive ROM (Fast)", None))
-        self.pbAPROMFastSkip.setText(QCoreApplication.translate("PlutoFullAssessor", u"X", None))
         self.pbDiscReach.setText(QCoreApplication.translate("PlutoFullAssessor", u"Discrete Reaching", None))
         self.pbDiscReachSkip.setText(QCoreApplication.translate("PlutoFullAssessor", u"X", None))
         self.pbPosHold.setText(QCoreApplication.translate("PlutoFullAssessor", u"Position Hold", None))

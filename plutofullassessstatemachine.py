@@ -88,21 +88,13 @@ class Events(Enum):
     PROM_SKIP = auto()
     PROM_REJECT = auto()
     #
-    # APROM Slow events
+    # APROM (Assisted PROM) events
     #
-    APROMSLOW_ASSESS = auto()
-    APROMSLOW_DONE = auto()
-    APROMSLOW_NO_DONE = auto()
-    APROMSLOW_SKIP = auto()
-    APROMSLOW_REJECT = auto()
-    #
-    # APROM Fast events
-    #
-    APROMFAST_ASSESS = auto()
-    APROMFAST_DONE = auto()
-    APROMFAST_NO_DONE = auto()
-    APROMFAST_SKIP = auto()
-    APROMFAST_REJECT = auto()
+    APROM_ASSESS = auto()
+    APROM_DONE = auto()
+    APROM_NO_DONE = auto()
+    APROM_SKIP = auto()
+    APROM_REJECT = auto()
     #
     # Position hold events
     #
@@ -162,8 +154,7 @@ class Events(Enum):
         return [
             Events.AROM_ASSESS,
             Events.PROM_ASSESS,
-            Events.APROMSLOW_ASSESS,
-            Events.APROMFAST_ASSESS,
+            Events.APROM_ASSESS,
             Events.POSHOLD_ASSESS,
             Events.DISCREACH_ASSESS,
             Events.PROP_ASSESS,
@@ -177,8 +168,7 @@ class Events(Enum):
         return [
             Events.AROM_SKIP,
             Events.PROM_SKIP,
-            Events.APROMSLOW_SKIP,
-            Events.APROMFAST_SKIP,
+            Events.APROM_SKIP,
             Events.POSHOLD_SKIP,
             Events.DISCREACH_SKIP,
             Events.PROP_SKIP,
@@ -197,8 +187,7 @@ class States(Enum):
     CALIBRATE = auto()
     AROM_ASSESS = auto()
     PROM_ASSESS = auto()
-    APROMSLOW_ASSESS = auto()
-    APROMFAST_ASSESS = auto()
+    APROM_ASSESS = auto()
     POSHOLD_ASSESS = auto()
     DISC_ASSESS = auto()
     PROP_ASSESS = auto()
@@ -230,8 +219,7 @@ class PlutoFullAssessmentStateMachine:
             States.CALIBRATE: self._handle_calibrate,
             States.AROM_ASSESS: self._handle_arom_assess,
             States.PROM_ASSESS: self._handle_prom_assess,
-            States.APROMSLOW_ASSESS: self._handle_apromslow_assess,
-            States.APROMFAST_ASSESS: self._handle_apromfast_assess,
+            States.APROM_ASSESS: self._handle_aprom_assess,
             States.POSHOLD_ASSESS: self._handle_poshold_assess,
             States.DISC_ASSESS: self._handle_discreach_assess,
             States.PROP_ASSESS: self._handle_prop_assess,
@@ -248,8 +236,7 @@ class PlutoFullAssessmentStateMachine:
         self._task_to_nextstate = {
             "AROM": States.AROM_ASSESS,
             "PROM": States.PROM_ASSESS,
-            "APROMSLOW": States.APROMSLOW_ASSESS,
-            "APROMFAST": States.APROMFAST_ASSESS,
+            "APROM": States.APROM_ASSESS,
             "POSHOLD": States.POSHOLD_ASSESS,
             "DISC": States.DISC_ASSESS,
             "PROP": States.PROP_ASSESS,
@@ -261,8 +248,7 @@ class PlutoFullAssessmentStateMachine:
         self._event_to_nextstate = {
             Events.AROM_ASSESS: States.AROM_ASSESS,
             Events.PROM_ASSESS: States.PROM_ASSESS,
-            Events.APROMSLOW_ASSESS: States.APROMSLOW_ASSESS,
-            Events.APROMFAST_ASSESS: States.APROMFAST_ASSESS,
+            Events.APROM_ASSESS: States.APROM_ASSESS,
             Events.POSHOLD_ASSESS: States.POSHOLD_ASSESS,
             Events.DISCREACH_ASSESS: States.DISC_ASSESS,
             Events.PROP_ASSESS: States.PROP_ASSESS,
@@ -494,10 +480,10 @@ class PlutoFullAssessmentStateMachine:
             )
             self.log(f"PROM not done for {self._data.protocol.mech}.")
 
-    def _handle_apromslow_assess(self, event, data):
+    def _handle_aprom_assess(self, event, data):
         """ """
-        # Check if APROM is et.
-        if event == Events.APROMSLOW_DONE:
+        # Check if APROM is set.
+        if event == Events.APROM_DONE:
             # Update AROM assessment data.
             self._data.detailedsummary.update(
                 romval=data["romval"],
@@ -524,10 +510,10 @@ class PlutoFullAssessmentStateMachine:
                 else States.TASK_SELECT
             )
             _romval = self._data.detailedsummary[self._data.protocol.mech]["tasks"][
-                "APROMSLOW"
+                "APROM"
             ][-1]["rom"]
-            self.log(f"APROMSLOW Set: [{_romval[0]:+2.2f}, {_romval[1]:+2.2f}]")
-        elif event == Events.APROMSLOW_NO_DONE or event == Events.APROMSLOW_REJECT:
+            self.log(f"APROM Set: [{_romval[0]:+2.2f}, {_romval[1]:+2.2f}]")
+        elif event == Events.APROM_NO_DONE or event == Events.APROM_REJECT:
             # Update AROM assessment data.
             self._data.detailedsummary.update(
                 romval=data["romval"],
@@ -545,60 +531,7 @@ class PlutoFullAssessmentStateMachine:
                 if self._data.protocol.current_mech_completed
                 else States.TASK_SELECT
             )
-            self.log(f"APROMSLOW not done for {self._data.protocol.mech}.")
-
-    def _handle_apromfast_assess(self, event, data):
-        """ """
-        # Check if AROM is et.
-        if event == Events.APROMFAST_DONE:
-            # Update AROM assessment data.
-            self._data.detailedsummary.update(
-                romval=data["romval"],
-                session=self._data.session,
-                tasktime=self._data.protocol.tasktime,
-                rawfile=self._data.protocol.rawfilename,
-                summaryfile=self._data.protocol.summaryfilename,
-                taskcomment=data["taskcomment"],
-                status=data["status"],
-            )
-            # Update the protocol data.
-            self._data.protocol.update(
-                self._data.session,
-                self._data.protocol.rawfilename,
-                self._data.protocol.summaryfilename,
-                taskcomment=data["taskcomment"],
-                status=data["status"],
-            )
-            # Jumpy to the next task state.
-            # Check if the current mechanism has been assessed.
-            self._state = (
-                States.MECH_OR_TASK_SELECT
-                if self._data.protocol.current_mech_completed
-                else States.TASK_SELECT
-            )
-            _romval = self._data.detailedsummary[self._data.protocol.mech]["tasks"][
-                "APROMFAST"
-            ][-1]["rom"]
-            self.log(f"APROMFAST Set: [{_romval[0]:+2.2f}, {_romval[1]:+2.2f}]")
-        elif event == Events.APROMFAST_NO_DONE or event == Events.APROMFAST_REJECT:
-            # Update AROM assessment data.
-            self._data.detailedsummary.update(
-                romval=data["romval"],
-                session=self._data.session,
-                tasktime=self._data.protocol.tasktime,
-                rawfile=self._data.protocol.rawfilename,
-                summaryfile=self._data.protocol.summaryfilename,
-                taskcomment=data["taskcomment"],
-                status=data["status"],
-            )
-            # Jumpy to the next task state.
-            # Check if the current mechanism has been assessed.
-            self._state = (
-                States.MECH_OR_TASK_SELECT
-                if self._data.protocol.current_mech_completed
-                else States.TASK_SELECT
-            )
-            self.log(f"APROMFAST not done for {self._data.protocol.mech}.")
+            self.log(f"APROM not done for {self._data.protocol.mech}.")
 
     def _handle_poshold_assess(self, event, data):
         """ """
@@ -930,16 +863,11 @@ class PlutoFullAssessmentStateMachine:
             self._data.protocol.set_task("PROM")
             self._data.detailedsummary.set_task("PROM")
             self.log(f"Task set to PROM.")
-        elif event == Events.APROMSLOW_ASSESS:
+        elif event == Events.APROM_ASSESS:
             self._state = self._event_to_nextstate[event]
-            self._data.protocol.set_task("APROMSLOW")
-            self._data.detailedsummary.set_task("APROMSLOW")
-            self.log(f"Task set to APROMSLOW.")
-        elif event == Events.APROMFAST_ASSESS:
-            self._state = self._event_to_nextstate[event]
-            self._data.protocol.set_task("APROMFAST")
-            self._data.detailedsummary.set_task("APROMFAST")
-            self.log(f"Task set to APROMFAST.")
+            self._data.protocol.set_task("APROM")
+            self._data.detailedsummary.set_task("APROM")
+            self.log(f"Task set to APROM.")
         elif event == Events.POSHOLD_ASSESS:
             self._state = self._event_to_nextstate[event]
             self._data.protocol.set_task("POSHOLD")
@@ -996,22 +924,14 @@ class PlutoFullAssessmentStateMachine:
                 taskname="PROM", session=data["session"], comment=data["comment"]
             )
             self.log(f"Task PROM skipped.")
-        elif event == Events.APROMSLOW_SKIP:
+        elif event == Events.APROM_SKIP:
             self._data.protocol.skip_task(
-                taskname="APROMSLOW", session=data["session"], comment=data["comment"]
+                taskname="APROM", session=data["session"], comment=data["comment"]
             )
             self._data.detailedsummary.skip_task(
-                taskname="APROMSLOW", session=data["session"], comment=data["comment"]
+                taskname="APROM", session=data["session"], comment=data["comment"]
             )
-            self.log(f"Task APROMSLOW skipped.")
-        elif event == Events.APROMFAST_SKIP:
-            self._data.protocol.skip_task(
-                taskname="APROMFAST", session=data["session"], comment=data["comment"]
-            )
-            self._data.detailedsummary.skip_task(
-                taskname="APROMFAST", session=data["session"], comment=data["comment"]
-            )
-            self.log(f"Task APROMFAST skipped.")
+            self.log(f"Task APROM skipped.")
         elif event == Events.POSHOLD_SKIP:
             self._data.protocol.skip_task(
                 taskname="POSHOLD", session=data["session"], comment=data["comment"]
