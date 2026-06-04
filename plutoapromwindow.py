@@ -72,6 +72,10 @@ class APRomData(object):
         self._rest_position = None
         self._disp_left = None            # left boundary for display
         self._disp_right = None           # right boundary for display
+        # HOC cycling: which boundary is currently being marked
+        # ("OPENING"/"CLOSING"), switched by a position threshold. Cycles are
+        # built only from measured movement extremes (start is never marked).
+        self._active_side = None
         # Logging variables
         self._logstate: RawDataLoggingState = RawDataLoggingState.WAIT_FOR_LOG
         self._rawfilewriter: misc.CSVBufferWriter = misc.CSVBufferWriter(
@@ -201,6 +205,7 @@ class APRomData(object):
         self._rest_position = None
         self._disp_left = None
         self._disp_right = None
+        self._active_side = None
 
     def add_newdata(self, dt, pos):
         """Add new data to the trial data."""
@@ -272,6 +277,76 @@ class APRomData(object):
                 and self._trialrom[-1] - self._startpos > _th
             )
 
+    def _update_cycling_hoc(self, pos) -> bool:
+        """HOC open/close cycling, determined ONLY by back-and-forth movement.
+
+        Both boundaries are measured movement extremes — the fully-closed start
+        position is NEVER marked or used as a boundary. startpos serves only to
+        detect the first opening direction (and a small dead zone so tremor at
+        the start does not seed anything).
+
+        Extremes are marked with the velocity/rest rule (the part that works):
+        the active boundary's value updates only while at rest. Which boundary
+        is active flips by a position threshold from the current extreme
+        (CYCLING_MIN_EXCURSION_HOC), checked every sample:
+
+          - OPENING: extend the open mark at rest. Reverse-close past
+            (open - threshold) -> open is final; start measuring the close.
+          - CLOSING: extend the close mark at rest. Reverse-open past
+            (close + threshold) -> the close is final, so a full cycle
+            (measured close + measured open) is COUNTED; start the next open.
+
+        A cycle therefore needs a measured open AND a measured close — the first
+        cycle is not counted until the hand has actually closed and reversed, so
+        nothing is ever pinned at the start. Returns True when a cycle counts."""
+        if not self._trialdata["vel"]:
+            return False
+        _n = AROM.CYCLING_HOLD_SAMPLES
+        vel_mean = float(np.mean(self._trialdata["vel"][-_n:]))
+        _rest_th = AROM.CYCLING_REST_VEL_THRESHOLD_HOC
+        _switch_th = AROM.CYCLING_MIN_EXCURSION_HOC
+        _at_rest = abs(vel_mean) <= _rest_th
+
+        # Wait for the first real opening (past a dead zone above the start) to
+        # begin. The start position itself is never recorded.
+        if self._active_side is None:
+            if _at_rest and pos > self._startpos + _switch_th:
+                self._active_side = "OPENING"
+                self._cycle_right = pos
+                self._disp_right = pos
+            return False
+
+        if self._active_side == "OPENING":
+            # Extend the open extreme only at rest.
+            if _at_rest and (self._cycle_right is None or pos > self._cycle_right):
+                self._cycle_right = pos
+                self._disp_right = pos
+            # Reversed toward closed past the threshold -> open is final; begin
+            # measuring the close (no mark yet — set by the first close rest).
+            if self._cycle_right is not None and pos < self._cycle_right - _switch_th:
+                self._active_side = "CLOSING"
+                self._cycle_left = None
+                self._disp_left = None
+        else:  # CLOSING
+            # Extend the close extreme only at rest.
+            if _at_rest and (self._cycle_left is None or pos < self._cycle_left):
+                self._cycle_left = pos
+                self._disp_left = pos
+            # Reversed toward open past the threshold -> close is final. Both
+            # extremes are now measured: count the cycle and start the next open.
+            if self._cycle_left is not None and pos > self._cycle_left + _switch_th:
+                self._cycles_completed += 1
+                _cyc = (self._cycle_left, self._cycle_right)
+                self._cycle_history.append(_cyc)
+                self._all_cycles.append(_cyc)
+                if len(self._cycle_history) > 3:
+                    self._cycle_history.pop(0)
+                self._active_side = "OPENING"
+                self._cycle_right = pos
+                self._disp_right = pos
+                return True
+        return False
+
     def update_cycling_data(self, pos) -> bool:
         """Rest-driven boundary marking (nothing is drawn while moving).
 
@@ -294,7 +369,12 @@ class APRomData(object):
         instantly while the left one had a window to grow. Instead both extremes
         stay live (and keep extending) until the subject reverses back toward
         the start with a new distinct LEFT rest, which closes the cycle and
-        seeds the next one. Returns True on that cycle-closing reversal."""
+        seeds the next one. Returns True on that cycle-closing reversal.
+
+        HOC uses _update_cycling_hoc (threshold-switched active boundary)."""
+        if self.mechanism == "HOC":
+            return self._update_cycling_hoc(pos)
+
         if not self._trialdata["vel"]:
             return False
 
