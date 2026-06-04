@@ -210,6 +210,12 @@ class BaseConstants:
     STOP_ZONE_DURATION_THRESHOLD = 1  # sec
     HOC_NEW_ROM_TH = 0.10  # cm
     NOT_HOC_NEW_ROM_TH = 1.0  # deg
+    # HOC PROM/APROM: the closed end is bounded at fully closed (hocdisp ~ 0).
+    # When the AROM closed boundary is already at fully closed, the passive range
+    # cannot be pushed beyond it, so accept the closed boundary when the cursor
+    # is within this distance of fully closed instead of requiring it to exceed
+    # the AROM closed limit.
+    FULLY_CLOSED_HOC_THRESHOLD = 0.5  # cm
 
     # Data logging constants
     RAW_HEADER = [

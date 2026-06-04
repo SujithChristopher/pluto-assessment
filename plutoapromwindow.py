@@ -246,7 +246,16 @@ class APRomData(object):
         _out_of_arom = misc.is_out_of_range(
             val=_pos, minval=self.arom[0], maxval=self.arom[1], thres=0
         )
-        if _out_of_rom and _out_of_arom:
+        # HOC: the closed end is bounded at fully closed (~0). When the AROM
+        # closed boundary already sits at fully closed, the passive range cannot
+        # be pushed beyond it, so accept a closed point that reaches within
+        # FULLY_CLOSED_HOC_THRESHOLD of fully closed even though it is not
+        # outside the (already fully-closed) AROM. Open side is unaffected.
+        _near_fully_closed = (
+            self.mechanism == "HOC"
+            and _pos <= AROM.FULLY_CLOSED_HOC_THRESHOLD
+        )
+        if _out_of_rom and (_out_of_arom or _near_fully_closed):
             self._trialrom.append(_pos)
             self._trialrom.sort()
             self._trialrom[:] = [self._trialrom[0], self._trialrom[-1]]
