@@ -18,7 +18,7 @@ from PySide6.QtGui import QColor
 #
 # PLUTO COM Port
 #
-PLUTOCOMM = "COM5" # Sujith system
+PLUTOCOMM = "COM11" # Sujith system
 # PLUTOCOMM = "COM8"
 
 

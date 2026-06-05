@@ -183,7 +183,7 @@ if __name__ == "__main__":
 
     qtjedi._OUTDEBUG = False
     app = QtWidgets.QApplication(sys.argv)
-    plutodev = QtPluto("COM5")
+    plutodev = QtPluto("COM11")
     plutodev.send_heartbeat()
     plutodev.set_limb("RIGHT")
     pdataview = PlutoDataViewWindow(plutodev=plutodev, mode="DIAGNOSTICS")
