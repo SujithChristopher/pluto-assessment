@@ -13,6 +13,22 @@ from enum import Enum
 import misc
 
 from PySide6.QtGui import QColor
+from PySide6.QtCore import QStandardPaths
+
+
+def homer_data_root() -> pathlib.Path:
+    """Base folder for all HOMER-PLUTO data: <Documents>/homerpluto.
+
+    Stored under the user's Documents so the packaged Windows app always writes
+    to a stable, user-writable location regardless of where the .exe is launched
+    from. QStandardPaths resolves the real Documents folder (incl. OneDrive
+    redirection); fall back to ~/Documents if it is unavailable."""
+    _docs = QStandardPaths.writableLocation(
+        QStandardPaths.StandardLocation.DocumentsLocation
+    )
+    if not _docs:
+        _docs = str(pathlib.Path.home() / "Documents")
+    return pathlib.Path(_docs) / "homerpluto"
 
 
 #
@@ -48,8 +64,8 @@ class AssessStatus(Enum):
 # Full Assessment Constant
 #
 # Module level constants.
-DATA_DIR = "../fullassessment"
-SUBJLIST_FILE = f"{DATA_DIR}/fullassess_subjects.csv"
+DATA_DIR = str(homer_data_root() / "fullassessment")
+SUBJLIST_FILE = str(pathlib.Path(DATA_DIR) / "fullassess_subjects.csv")
 
 # Proprioceptive assessment control timer delta (seconds).
 PROPASS_CTRL_TIMER_DELTA = 0.01
