@@ -238,6 +238,15 @@ class APRomData(object):
         _out_of_rom = misc.is_out_of_range(
             val=_pos, minval=self._trialrom[0], maxval=self._trialrom[-1], thres=_th
         )
+        # HOC PROM is open-only from the pinned closed end (0): record the max
+        # open freely (no AROM constraint); the closed end stays at 0.
+        if self.mechanism == "HOC" and self.romtype == pfadef.ROMType.PASSIVE:
+            if _out_of_rom:
+                self._trialrom.append(_pos)
+                self._trialrom.sort()
+                self._trialrom[:] = [self._trialrom[0], self._trialrom[-1]]
+                return True
+            return False
         # AROM is not given
         if self.arom is None:
             if _out_of_rom:
@@ -277,19 +286,14 @@ class APRomData(object):
             if self.mechanism == "HOC"
             else AROM.STOP_POS_NOT_HOC_THRESHOLD
         )
-        # Centred PROM (passive + AROM available) is two-sided about the AROM
-        # centre for every mechanism, HOC included. Non-centred HOC keeps its
-        # one-sided (open-only) check.
-        _centered = (
-            self.romtype == pfadef.ROMType.PASSIVE and self.arom is not None
-        )
-        if self.mechanism == "HOC" and not _centered:
+        # HOC is one-sided: open-only from the closed start (0). Non-HOC is
+        # two-sided about the start/centre.
+        if self.mechanism == "HOC":
             return self._trialrom[-1] - self._startpos > _th
-        else:
-            return (
-                self._trialrom[0] - self._startpos < -_th
-                and self._trialrom[-1] - self._startpos > _th
-            )
+        return (
+            self._trialrom[0] - self._startpos < -_th
+            and self._trialrom[-1] - self._startpos > _th
+        )
 
     def _update_cycling_hoc(self, pos) -> bool:
         """HOC open/close cycling, determined ONLY by back-and-forth movement.
@@ -551,6 +555,12 @@ class APRomData(object):
         self._startpos = float(self.arom_center)
         self._trialrom = [self._startpos]
 
+    def set_startpos_closed(self):
+        """Pin the closed reference to fully closed (0) for open-only HOC PROM.
+        PROM is then recorded as [0, max-open]."""
+        self._startpos = 0.0
+        self._trialrom = [0.0]
+
     def start_rawlogging(self):
         self._logstate = RawDataLoggingState.LOG_DATA
 
@@ -596,10 +606,19 @@ class PlutoAPRomAssessmentStateMachine:
     @property
     def _is_prom_centered(self):
         """PROM that is centred on the AROM centre: passive and AROM was
-        completed (so an AROM range/centre is available). Applies to every
-        mechanism, HOC included."""
+        completed (so an AROM range/centre is available). Non-HOC only — HOC
+        PROM is open-only (see _is_hoc_prom)."""
         return (self._data.romtype == pfadef.ROMType.PASSIVE
-                and self._data.arom is not None)
+                and self._data.arom is not None
+                and self._data.mechanism != "HOC")
+
+    @property
+    def _is_hoc_prom(self):
+        """HOC PROM: open-only from the fully-closed start (0). No centre, no
+        return-to-rest; the trial records the max open and the assessor ends it
+        with the PLUTO button."""
+        return (self._data.mechanism == "HOC"
+                and self._data.romtype == pfadef.ROMType.PASSIVE)
 
     def _pos(self):
         """Live mechanism position (cm for HOC, deg otherwise)."""
@@ -679,7 +698,12 @@ class PlutoAPRomAssessmentStateMachine:
             else f"trial {self._data._currtrial + 1}/{self._data.ntrials}"
         )
         _unit = "cm" if self._data.mechanism == "HOC" else "deg"
-        if _centered:
+        if self._is_hoc_prom:
+            self._instruction = (
+                f"Close the hand fully, hold and press PLUTO Button to start "
+                f"{_trial_tag}."
+            )
+        elif _centered:
             self._instruction = (
                 f"Move to centre ({_center:.1f} {_unit}), hold and press PLUTO "
                 f"Button to start {_trial_tag}."
@@ -701,7 +725,10 @@ class PlutoAPRomAssessmentStateMachine:
                     # Centred PROM must begin at the AROM centre — gate on it.
                     if _centered and not self.subj_near_center():
                         return
-                    if _centered:
+                    if self._is_hoc_prom:
+                        # Open-only: pin the closed end at 0, record max open.
+                        self._data.set_startpos_closed()
+                    elif _centered:
                         self._data.set_startpos_center()
                     else:
                         self._data.set_startpos()
@@ -723,12 +750,28 @@ class PlutoAPRomAssessmentStateMachine:
                 if self.away_from_start():
                     self._state = States.CYCLING
         else:
-            self._instruction = f"Move an hold to record ROM."
+            self._instruction = (
+                "Open the hand — press the PLUTO Button when done."
+                if self._is_hoc_prom
+                else "Move an hold to record ROM."
+            )
             if event == pdef.PlutoEvents.NEWDATA:
                 if self.subj_is_holding() is False and self.away_from_start():
                     self._state = States.MOVING
 
     def _handle_moving(self, event, dt):
+        # HOC PROM is open-only: record the max open continuously and let the
+        # assessor end the trial with the PLUTO button (no return-to-rest).
+        if self._is_hoc_prom:
+            self._instruction = "Open the hand — press the PLUTO Button when done."
+            if event == pdef.PlutoEvents.NEWDATA:
+                _ = self._data.add_new_trialrom_data()
+            elif event == pdef.PlutoEvents.RELEASED and self._data.is_trialrom_valid():
+                if not self._data.demomode:
+                    self._data.set_rom()
+                    self._data.start_newtrial()
+                self._state = States.REST
+            return
         self._instruction = f"Move and hold to record ROM position."
         if event == pdef.PlutoEvents.NEWDATA:
             # Nothing to do if the subject is moving.
@@ -1011,12 +1054,21 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
 
     @property
     def _is_prom_centered(self):
-        """Centred PROM: passive and AROM completed (range/centre available),
-        for every mechanism including HOC. Drives the single-line centred
-        display, the AROM/resting reference lines, and the centre start gate."""
+        """Centred PROM: passive and AROM completed (range/centre available).
+        Non-HOC only — HOC PROM is open-only (see _is_hoc_prom). Drives the
+        single-line centred display, resting reference, and centre start gate."""
         return (
             self.data.romtype == pfadef.ROMType.PASSIVE
             and self.data.arom is not None
+            and self.data.mechanism != "HOC"
+        )
+
+    @property
+    def _is_hoc_prom(self):
+        """HOC PROM: open-only, corner-anchored 0 -> open display."""
+        return (
+            self.data.mechanism == "HOC"
+            and self.data.romtype == pfadef.ROMType.PASSIVE
         )
 
     def _xpos(self, pos):
@@ -1091,9 +1143,9 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         if self.data.mechanism == "HOC":
             if self.pluto.hocdisp is None:
                 return
-            if self._is_hoc_cycling or self._is_prom_centered:
-                # Single corner-anchored cursor line (cycling AROM and centred
-                # PROM both use the 0..MAXHOC view).
+            if self._is_hoc_cycling or self._is_prom_centered or self._is_hoc_prom:
+                # Single corner-anchored cursor line (cycling AROM, centred PROM
+                # and open-only HOC PROM all use the 0..MAXHOC view).
                 _x = self._xpos(self.pluto.hocdisp)
                 self.ui.currPosLine1.setData(
                     [_x, _x],
@@ -1159,6 +1211,11 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         self.ui.restZoneFill.setRect(_xc - _hw, AROM.CURSOR_LOWER_LIMIT, 2 * _hw, _h)
 
     def _draw_stop_zone_lines(self):
+        # Open-only HOC PROM has no stop zone (no return-to-rest).
+        if self._is_hoc_prom:
+            self.ui.stopLine1.setData([], [])
+            self.ui.stopLine2.setData([], [])
+            return
         _th = (
             AROM.STOP_POS_HOC_THRESHOLD
             if self.data.mechanism == "HOC"
@@ -1202,6 +1259,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.data.mechanism == "HOC"
             and not self._is_hoc_cycling
             and not self._is_prom_centered
+            and not self._is_hoc_prom
         ):
             if len(self.data._trialrom) > 1:
                 self.ui.romLine1.setData(
@@ -1606,26 +1664,20 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         # Angle display sign for the limb.
         self._dispsign = 1.0
 
-        # AROM lines when appropriate. Centred PROM (incl. HOC) maps both AROM
-        # boundaries through _xpos; plain HOC PROM keeps the mirrored display.
+        # AROM reference lines (green dotted), shown when an AROM range exists.
+        # Both boundaries map through _xpos so HOC (corner-anchored, incl.
+        # open-only PROM) and non-HOC share one path. For HOC PROM this puts the
+        # AROM-open line where the therapist should open a little past.
         if self.data.arom is not None:
-            if self.data.mechanism == "HOC" and not self._is_prom_centered:
-                _pos = [-self.data.arom[1], -self.data.arom[1]]
-            else:
-                _pos = [self._xpos(self.data.arom[0])] * 2
             self.ui.aromPosLine1 = pg.PlotDataItem(
-                _pos,
+                [self._xpos(self.data.arom[0])] * 2,
                 [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
                 pen=pg.mkPen(
                     color="#1EFF00", width=1, style=QtCore.Qt.PenStyle.DotLine
                 ),
             )
-            if self.data.mechanism == "HOC" and not self._is_prom_centered:
-                _pos = [self.data.arom[1], self.data.arom[1]]
-            else:
-                _pos = [self._xpos(self.data.arom[1])] * 2
             self.ui.aromPosLine2 = pg.PlotDataItem(
-                _pos,
+                [self._xpos(self.data.arom[1])] * 2,
                 [AROM.CURSOR_LOWER_LIMIT, AROM.CURSOR_UPPER_LIMIT],
                 pen=pg.mkPen(
                     color="#1EFF00", width=1, style=QtCore.Qt.PenStyle.DotLine
