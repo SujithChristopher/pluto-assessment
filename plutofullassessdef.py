@@ -34,7 +34,7 @@ def homer_data_root() -> pathlib.Path:
 #
 # PLUTO COM Port
 #
-PLUTOCOMM = "COM11" # Sujith system
+PLUTOCOMM = "COM4" # Sujith system
 # PLUTOCOMM = "COM8"
 
 
@@ -116,7 +116,7 @@ TASK_LABELS = {
 # after the first list tasks are completed, but in a random order. When one of
 # the lists is empty, it means that there are no tasks to be done in that order.
 MECH_TASKS = {
-    "FPS": [["AROM", "PROM", "APROM"], ["POSHOLD", "DISC"]],
+    "FPS": [["AROM", "PROM", "APROM"], ["DISC"]],
     "WFE": [["AROM", "PROM", "APROM", "DISC"], []],
     "WURD": [["AROM", "PROM", "APROM", "DISC"], []],
     "HOC": [

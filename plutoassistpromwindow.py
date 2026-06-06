@@ -1166,7 +1166,7 @@ if __name__ == "__main__":
 
     qtjedi._OUTDEBUG = False
     app = QtWidgets.QApplication(sys.argv)
-    plutodev = QtPluto("COM11")
+    plutodev = QtPluto("COM4")
     pcalib = PlutoAssistPRomAssessWindow(
         plutodev=plutodev,
         assessinfo={
