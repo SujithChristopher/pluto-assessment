@@ -57,6 +57,82 @@ from async_workers import LimbSetupWorker
 DEBUG = False
 
 
+# Application-wide theme. Applied once on the QApplication so every task
+# window/dialog inherits it. Per-widget stylesheets (e.g. status colours from
+# pfadef.STATUS_STYLESHEET, the black device terminal) still override locally.
+APP_STYLESHEET = """
+QWidget {
+    background-color: #f4f6f8;
+    color: #202124;
+    font-family: "Segoe UI", "Bahnschrift Light";
+    font-size: 10pt;
+}
+QGroupBox {
+    border: 1px solid #d0d4d9;
+    border-radius: 8px;
+    margin-top: 10px;
+    padding: 8px 6px 6px 6px;
+    background-color: #ffffff;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10px;
+    padding: 0 4px;
+    color: #5f6368;
+    font-weight: 600;
+}
+QPushButton {
+    background-color: #ffffff;
+    border: 1px solid #c4c9cf;
+    border-radius: 6px;
+    padding: 5px 10px;
+}
+QPushButton:hover {
+    background-color: #eef2f7;
+    border-color: #9aa4b2;
+}
+QPushButton:pressed {
+    background-color: #e2e8f0;
+}
+QPushButton:disabled {
+    color: #9aa0a6;
+    background-color: #f1f3f4;
+    border-color: #e3e6ea;
+}
+QComboBox {
+    background-color: #ffffff;
+    border: 1px solid #c4c9cf;
+    border-radius: 6px;
+    padding: 3px 6px;
+}
+QComboBox:disabled {
+    background-color: #f1f3f4;
+    color: #9aa0a6;
+}
+QLabel {
+    background: transparent;
+}
+QTableView {
+    border: 1px solid #d0d4d9;
+    border-radius: 6px;
+    background-color: #ffffff;
+    gridline-color: #e8eaed;
+}
+QHeaderView::section {
+    background-color: #eceff1;
+    border: none;
+    border-right: 1px solid #e0e3e7;
+    padding: 4px 6px;
+    color: #3c4043;
+}
+QStatusBar {
+    background-color: #eceff1;
+    color: #3c4043;
+}
+"""
+
+
 class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
     """Main window of the PLUTO proprioception assessment program."""
 
@@ -69,6 +145,10 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self.setMinimumSize(0, 0)
         self.setMaximumSize(16777215, 16777215)
         self.lblSubjDetails.setMaximumSize(16777215, 16777215)
+
+        # Restructure the loose left-column controls into titled group boxes.
+        self._group_left_column()
+
         self.showMaximized()
 
         self._flag = False
@@ -1269,6 +1349,63 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self.pbFPSSkip.setFont(font)
         self.pbHOCSkip.setFont(font)
 
+    def _move_into(self, src_layout, dst_layout, item):
+        """Move a widget or nested layout from src_layout to dst_layout."""
+        if isinstance(item, QtWidgets.QWidget):
+            src_layout.removeWidget(item)
+            dst_layout.addWidget(item)
+        else:
+            # QLayout is-a QLayoutItem, so removeItem accepts it directly.
+            src_layout.removeItem(item)
+            dst_layout.addLayout(item)
+
+    def _group_left_column(self):
+        """Wrap the loose left-column controls into titled QGroupBoxes.
+
+        Final order: "Subject & Session", existing "Mechanisms",
+        "Tasks". gbMechanisms is left in place; everything above/below it is
+        relocated, then the two new groups are inserted around it.
+        """
+        vl = self.verticalLayout
+
+        # Subject & Session: subject buttons, details, limb, time point.
+        self.gbSession = QtWidgets.QGroupBox("Subject && Session")
+        sv = QtWidgets.QVBoxLayout(self.gbSession)
+        sv.setSpacing(4)
+        for _item in (
+            self.pbCreateSeelectSubject,
+            self.pbSelectSubject,
+            self.lblSubjDetails,
+            self.horizontalLayout_2,
+            self.pbSetLimb,
+            self.horizontalLayout_timepoint,
+            self.pbSetTimePoint,
+        ):
+            self._move_into(vl, sv, _item)
+
+        # Tasks: calibrate + all per-task rows.
+        self.gbTasks = QtWidgets.QGroupBox("Tasks")
+        tv = QtWidgets.QVBoxLayout(self.gbTasks)
+        tv.setSpacing(3)
+        for _item in (
+            self.pbCalibrate,
+            self.horizontalLayout,       # AROM
+            self.horizontalLayout_6,     # PROM
+            self.horizontalLayout_7,     # APROM (slow)
+            self.horizontalLayout_9,     # Discrete reach
+            self.horizontalLayout_10,    # Position hold
+            self.horizontalLayout_11,    # Proprioception
+            self.horizontalLayout_12,    # Force control low
+            self.horizontalLayout_13,    # Force control med
+            self.horizontalLayout_14,    # Force control high
+        ):
+            self._move_into(vl, tv, _item)
+
+        # Only gbMechanisms remains in vl now. Bracket it with the new groups.
+        vl.insertWidget(0, self.gbSession)
+        vl.addWidget(self.gbTasks)
+        vl.addStretch(1)
+
     def _init_task_windowvariables(self):
         self._devdatawnd = None
         self._calibwnd = None
@@ -1428,6 +1565,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
+    app.setStyleSheet(APP_STYLESHEET)
     mywin = PlutoFullAssesor(pfadef.PLUTOCOMM)
     # ImageUpdate()
     mywin.show()

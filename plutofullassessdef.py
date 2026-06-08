@@ -34,7 +34,7 @@ def homer_data_root() -> pathlib.Path:
 #
 # PLUTO COM Port
 #
-PLUTOCOMM = "COM4" # Sujith system
+PLUTOCOMM = "COM11" # Sujith system
 # PLUTOCOMM = "COM8"
 
 
