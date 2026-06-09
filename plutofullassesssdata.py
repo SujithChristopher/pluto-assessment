@@ -183,9 +183,9 @@ class PlutoAssessmentData(object):
 class PlutoAssessmentProtocolData(object):
     """Class to handle the full assessment protocol."""
 
-    def __init__(self, subjid, stype, domlimb, afflimb, slimb, timepoint, basedir, sessdir):
+    def __init__(self, subjid, mode, domlimb, afflimb, slimb, timepoint, basedir, sessdir):
         self._subjid = subjid
-        self._type = stype
+        self._mode = mode
         self._domlimb = domlimb
         self._afflimb = afflimb
         self._limb = slimb
@@ -244,9 +244,11 @@ class PlutoAssessmentProtocolData(object):
 
     @property
     def filename(self):
-        return pathlib.Path(
-            self._basedir, f"{self._subjid}_{self._type}_{self._limb}_{self._timepoint}_protocol.csv"
-        ).as_posix()
+        if self._mode == "screening":
+            _name = f"{self._subjid}_{self._limb}_screening_protocol.csv"
+        else:
+            _name = f"{self._subjid}_{self._limb}_{self._timepoint}_protocol.csv"
+        return pathlib.Path(self._basedir, _name).as_posix()
 
     @property
     def mech_completed(self) -> list[str]:
@@ -343,18 +345,16 @@ class PlutoAssessmentProtocolData(object):
 
     @property
     def rawfilename(self):
-        # Create the new file and handle.
         return pathlib.Path(
             self._sessdir,
-            f"{self._subjid}_{self._type}_{self._limb}_{self._mech}_{self._task}_raw-{self._tasktime}.csv",
+            f"{self._subjid}_{self._limb}_{self._mech}_{self._task}_raw-{self._tasktime}.csv",
         ).as_posix()
 
     @property
     def summaryfilename(self):
-        # Create the new file and handle.
         return pathlib.Path(
             self._sessdir,
-            f"{self._subjid}_{self._type}_{self._limb}_{self._mech}_{self._task}_summary-{self._tasktime}.csv",
+            f"{self._subjid}_{self._limb}_{self._mech}_{self._task}_summary-{self._tasktime}.csv",
         ).as_posix()
 
     #
@@ -581,31 +581,26 @@ class PlutoAssessmentProtocolData(object):
     def create_assessment_summary_file(self):
         if pathlib.Path(self.filename).exists():
             return
-        # Create the protocol summary file.
         _dframe = pd.DataFrame(columns=pfadef.FA_SUMMARY_HEADER)
-        for _m in pfadef.MECHANISMS:
-            # First set of tasks in the given order.
-            for _t in pfadef.MECH_TASKS[_m][0]:
-                _dframe = self._add_rows(_dframe, _m, _t)
-            # Second set of tasks are to be randomized.
-            for _tasks in pfadef.MECH_TASKS[_m][1:]:
-                random.shuffle(_tasks)
-                for _t in _tasks:
+        if self._mode == "screening":
+            # AROM only, every mechanism, no affected-side gate.
+            for _m in pfadef.MECHANISMS:
+                _dframe = self._add_rows(_dframe, _m, "AROM", gated=False)
+        else:
+            for _m in pfadef.MECHANISMS:
+                for _t in pfadef.MECH_TASKS[_m][0]:
                     _dframe = self._add_rows(_dframe, _m, _t)
-        # Write file to disk
+                for _tasks in pfadef.MECH_TASKS[_m][1:]:
+                    random.shuffle(_tasks)
+                    for _t in _tasks:
+                        _dframe = self._add_rows(_dframe, _m, _t)
         _dframe.to_csv(self.filename, sep=",", index=None)
 
-    def _add_rows(self, dframe, mechname, taskname):
-        # Check if this task is enabled.
-        _taskincluded = pfadef.is_task_included(
-            taskname=taskname,
-            limb=self._limb,
-            afflimb=self._afflimb,
-            subjtype=self._type,
-        )
-        if _taskincluded is False:
+    def _add_rows(self, dframe, mechname, taskname, gated=True):
+        if gated and not pfadef.is_task_included(
+            taskname=taskname, limb=self._limb, afflimb=self._afflimb
+        ):
             return dframe
-        # Create the rows.
         _n = pfadef.get_task_constants(taskname).NO_OF_TRIALS
         return pd.concat(
             [
@@ -631,9 +626,9 @@ class PlutoAssessmentProtocolData(object):
 class PlutoAssessmentDetailsData(object):
     """Class to store the details of the assessment data."""
 
-    def __init__(self, subjid, stype, domlimb, afflimb, slimb, timepoint, basedir):
+    def __init__(self, subjid, mode, domlimb, afflimb, slimb, timepoint, basedir):
         self._subjid = subjid
-        self._type = stype
+        self._mode = mode
         self._domlimb = domlimb
         self._afflimb = afflimb
         self._limb = slimb
@@ -672,9 +667,11 @@ class PlutoAssessmentDetailsData(object):
 
     @property
     def filename(self):
-        return pathlib.Path(
-            self._basedir, f"{self._subjid}_{self._type}_{self._limb}_{self._timepoint}_details.json"
-        ).as_posix()
+        if self._mode == "screening":
+            _name = f"{self._subjid}_{self._limb}_screening_details.json"
+        else:
+            _name = f"{self._subjid}_{self._limb}_{self._timepoint}_details.json"
+        return pathlib.Path(self._basedir, _name).as_posix()
 
     def __getitem__(self, key):
         return self._val[key]
@@ -831,35 +828,26 @@ class PlutoAssessmentDetailsData(object):
     def _create_assessment_details_dict(self):
         self._val = {
             "subj": self._subjid,
-            "type": self._type,
+            "mode": self._mode,
             "domlimb": self._domlimb,
             "afflimb": self._afflimb,
             "limb": self._limb,
         }
-
-        # Add mechanisms and empty lists for different tasks.
+        if self._mode == "screening":
+            for mech in pfadef.MECHANISMS:
+                self._val[mech] = {"status": "Incomplete", "tasks": {"AROM": []}}
+            return
         for mech in pfadef.MECHANISMS:
             self._val[mech] = {"status": "Incomplete", "tasks": {}}
-
-            # Add mandatory tasks for the mechanism.
-            mandatory_tasks = pfadef.MECH_TASKS[mech][0]
-            for task in mandatory_tasks:
+            for task in pfadef.MECH_TASKS[mech][0]:
                 if pfadef.is_task_included(
-                    taskname=task,
-                    limb=self._limb,
-                    afflimb=self._afflimb,
-                    subjtype=self._type,
+                    taskname=task, limb=self._limb, afflimb=self._afflimb
                 ):
                     self._val[mech]["tasks"][task] = []
-
-            # Add randomized tasks.
             for task_group in pfadef.MECH_TASKS[mech][1:]:
                 for task in task_group:
                     if pfadef.is_task_included(
-                        taskname=task,
-                        limb=self._limb,
-                        afflimb=self._afflimb,
-                        subjtype=self._type,
+                        taskname=task, limb=self._limb, afflimb=self._afflimb
                     ):
                         self._val[mech]["tasks"][task] = []
 
