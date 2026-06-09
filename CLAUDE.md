@@ -16,7 +16,7 @@ uv run python plutofullassessment.py
 uv run python plutopropass.py
 ```
 
-The COM port for PLUTO is hardcoded in `plutofullassessdef.py` as `PLUTOCOMM = "COM11"`. Change this to match the connected device.
+The COM port for PLUTO is hardcoded in `plutofullassessdef.py` as `PLUTOCOMM = "COM5"`. Change this to match the connected device.
 
 ## Environment Setup
 

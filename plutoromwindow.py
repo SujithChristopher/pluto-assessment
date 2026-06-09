@@ -326,7 +326,7 @@ class PlutoRomAssessWindow(QtWidgets.QMainWindow):
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
-    plutodev = QtPluto("COM11")
+    plutodev = QtPluto("COM5")
     pcalib = PlutoRomAssessWindow(plutodev=plutodev, mechanism="HOC")
     pcalib.show()
     sys.exit(app.exec())

@@ -377,7 +377,7 @@ if __name__ == "__main__":
     import qtjedi
 
     app = QtWidgets.QApplication(sys.argv)
-    plutodev = QtPluto("COM11")
+    plutodev = QtPluto("COM5")
     pcalib = PlutoCalibrationWindow(
         plutodev=plutodev,
         limb="LEFT",
