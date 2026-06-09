@@ -51,16 +51,17 @@ from misc import CSVBufferWriter
 class PlutoAssessmentData(object):
     def __init__(self):
         self.init_values()
-        # Create data folder if it does not exist.
+        # Ensure both data roots exist.
         pathlib.Path(passdef.DATA_DIR).mkdir(exist_ok=True, parents=True)
+        pathlib.Path(passdef.SCREENING_DIR).mkdir(exist_ok=True, parents=True)
+
+    @property
+    def mode(self):
+        return self._mode
 
     @property
     def subjid(self):
         return self._subjid
-
-    @property
-    def type(self):
-        return self._type
 
     @property
     def domlimb(self):
@@ -98,10 +99,13 @@ class PlutoAssessmentData(object):
     def detailedsummary(self):
         return self._detailsumry
 
+    @property
+    def is_screening(self):
+        return self._mode == "screening"
+
     def init_values(self):
-        # Subject details
+        self._mode = None
         self._subjid = None
-        self._type = None
         self._domlimb = None
         self._afflimb = None
         self._limb = None
@@ -109,106 +113,70 @@ class PlutoAssessmentData(object):
         self._session = None
         self._basedir = None
         self._sessdir = None
-        # Assessment protocol
         self._protocol: PlutoAssessmentProtocolData = None
         self._detailsumry: PlutoAssessmentDetailsData = None
 
-    def set_subject(self, subjid, subjtype, domlimb, afflimb):
+    def setup_session(self, setup: dict):
+        """Store all setup fields from the Session Setup window in one call.
+        Does not perform I/O — the worker calls create_session_folder()."""
         self.init_values()
-        self._subjid = subjid
-        self._type = subjtype
-        self._domlimb = domlimb
-        self._afflimb = afflimb
-
-    def set_limb(self, limb):
-        # Subject ID cannot be None
-        if self._subjid is None:
-            raise ValueError(
-                f"Subject ID has not been set. You cannot set anything else without a subject ID."
-            )
-        self._limb = limb
-
-    def set_timepoint(self, timepoint):
-        # Limb must be set before timepoint
-        if self._limb is None:
-            raise ValueError(
-                f"Limb has not been set. You cannot set a timepoint without a limb."
-            )
-        self._timepoint = timepoint
-        self.create_session_folder()
+        self._mode = setup["mode"]
+        self._subjid = setup["subjid"]
+        self._afflimb = setup["afflimb"]
+        # Screening screens the affected limb; limb == afflimb.
+        self._limb = setup["afflimb"] if self._mode == "screening" else setup["limb"]
+        self._domlimb = setup.get("domlimb", "") or ""
+        self._timepoint = setup.get("timepoint", "") or ""
 
     def create_session_folder(self):
-        # Create the data directory now.
-        # set data dir and create if needed.
-        self._session = f"{self.type[0].lower()}{self.limb[0].lower()}_{self.timepoint}_{dt.now().strftime('%Y%m%d_%H%M%S')}"
-        self._basedir = pathlib.Path(
-            passdef.DATA_DIR, self.type, self.subjid, self.limb, self.timepoint
-        )
+        """Create the session folder tree and write subject_info.json.
+        Branches on mode for path layout and session naming."""
+        _now = dt.now().strftime("%Y%m%d_%H%M%S")
+        if self.is_screening:
+            self._session = f"{self.limb[0].lower()}_screen_{_now}"
+            self._basedir = pathlib.Path(
+                passdef.SCREENING_DIR, self.subjid, self.limb
+            )
+            _info = {
+                "subjid": self.subjid,
+                "afflimb": self.afflimb,
+                "limb": self.limb,
+            }
+        else:
+            self._session = f"{self.limb[0].lower()}_{self.timepoint}_{_now}"
+            self._basedir = pathlib.Path(
+                passdef.DATA_DIR, self.subjid, self.limb, self.timepoint
+            )
+            _info = {
+                "subjid": self.subjid,
+                "domlimb": self.domlimb,
+                "afflimb": self.afflimb,
+                "limb": self.limb,
+                "timepoint": self.timepoint,
+            }
         self._sessdir = pathlib.Path(self.basedir, self.session)
         self.sessdir.mkdir(exist_ok=True, parents=True)
-        # Write a JSON file with the subject information.
         _fname = pathlib.Path(self._basedir, "subject_info.json").as_posix()
         with open(_fname, "w") as fh:
-            json.dump(
-                {
-                    "subjid": self.subjid,
-                    "type": self.type,
-                    "domlimb": self.domlimb,
-                    "afflimb": self.afflimb,
-                    "limb": self.limb,
-                    "timepoint": self.timepoint,
-                },
-                fh,
-                indent=4,
-            )
-
-    def is_timepoint_completed(self, limb, timepoint) -> bool:
-        """Check if the given timepoint for the given limb is completed."""
-        if self._subjid is None or self._type is None:
-            return False
-        _proto_file = pathlib.Path(
-            passdef.DATA_DIR,
-            self.type,
-            self.subjid,
-            limb,
-            timepoint,
-            f"{self.subjid}_{self.type}_{limb}_{timepoint}_protocol.csv",
-        )
-        if not _proto_file.exists():
-            return False
-        try:
-            _df = pd.read_csv(
-                _proto_file.as_posix(),
-                header=0,
-                index_col=None,
-                dtype=pfadef.SUMMARY_COLUMN_FORMAT,
-            )
-            return not _df["session"].isna().any()
-        except Exception:
-            return False
+            json.dump(_info, fh, indent=4)
 
     def get_session_info(self):
         _str = [
             f"{'' if self.session is None else self.session:<12}",
             f"{'' if self.subjid is None else self.subjid:<8}",
-            f"{self.type:<8}",
-            f"{self.limb:<6}",
+            f"{(self.mode or ''):<10}",
+            f"{(self.limb or ''):<6}",
         ]
         return ":".join(_str)
 
     def start_protocol(self):
         self._protocol = PlutoAssessmentProtocolData(
-            self.subjid,
-            self.type,
-            self.domlimb,
-            self.afflimb,
-            self.limb,
-            self.timepoint,
-            self._basedir,
-            self._sessdir,
+            self.subjid, self.mode, self.domlimb, self.afflimb,
+            self.limb, self.timepoint, self._basedir, self._sessdir,
         )
         self._detailsumry = PlutoAssessmentDetailsData(
-            self.subjid, self.type, self.domlimb, self.afflimb, self.limb, self.timepoint, self._basedir
+            self.subjid, self.mode, self.domlimb, self.afflimb,
+            self.limb, self.timepoint, self._basedir,
         )
 
 
