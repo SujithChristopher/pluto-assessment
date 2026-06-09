@@ -9,6 +9,7 @@ Email: siva82kb@gmail.com
 import json
 import pathlib
 import numpy as np
+import pandas as pd
 from enum import Enum
 import misc
 
@@ -66,6 +67,14 @@ class AssessStatus(Enum):
 # Module level constants.
 DATA_DIR = str(homer_data_root() / "fullassessment")
 SUBJLIST_FILE = str(pathlib.Path(DATA_DIR) / "fullassess_subjects.csv")
+
+# Screening: separate tree, single-shot (no timepoint), AROM only.
+SCREENING_DIR = str(homer_data_root() / "screening")
+SCREENING_SUBJLIST_FILE = str(pathlib.Path(SCREENING_DIR) / "screening_subjects.csv")
+
+# Subjects-list CSV headers per mode.
+ASSESS_SUBJECT_HEADER = ["subjid", "domlimb", "afflimb", "createdat"]
+SCREENING_SUBJECT_HEADER = ["subjid", "afflimb", "createdat"]
 
 # Proprioceptive assessment control timer delta (seconds).
 PROPASS_CTRL_TIMER_DELTA = 0.01
@@ -126,40 +135,20 @@ MECH_TASKS = {
         # ["FCTRLLOW", "FCTRLMED", "FCTRLHIGH"],
     ],
 }
+
+# Screening protocol: AROM only, every mechanism.
+SCREENING_MECH_TASKS = {_m: [["AROM"]] for _m in MECHANISMS}
+
 TASK_DEPENDENCIES = {
-    "AROM": {"in_subjtypes": ["stroke"], "in_unaffected": False, "depends_on": []},
-    "PROM": {"in_subjtypes": ["stroke"], "in_unaffected": False, "depends_on": []},
-    "APROM": {"in_subjtypes": ["stroke"], "in_unaffected": False, "depends_on": []},
-    "DISC": {
-        "in_subjtypes": ["stroke", "healthy"],
-        "in_unaffected": True,
-        "depends_on": ["AROM"],
-    },
-    "POSHOLD": {
-        "in_subjtypes": ["stroke", "healthy"],
-        "in_unaffected": False,
-        "depends_on": ["AROM"],
-    },
-    "FCTRLLOW": {
-        "in_subjtypes": ["stroke", "healthy"],
-        "in_unaffected": True,
-        "depends_on": ["AROM"],
-    },
-    "FCTRLMED": {
-        "in_subjtypes": ["stroke", "healthy"],
-        "in_unaffected": True,
-        "depends_on": ["AROM"],
-    },
-    "FCTRLHIGH": {
-        "in_subjtypes": ["stroke", "healthy"],
-        "in_unaffected": True,
-        "depends_on": ["AROM"],
-    },
-    "PROP": {
-        "in_subjtypes": ["stroke", "healthy"],
-        "in_unaffected": True,
-        "depends_on": ["PROM"],
-    },
+    "AROM": {"in_unaffected": False, "depends_on": []},
+    "PROM": {"in_unaffected": False, "depends_on": []},
+    "APROM": {"in_unaffected": False, "depends_on": []},
+    "DISC": {"in_unaffected": True, "depends_on": ["AROM"]},
+    "POSHOLD": {"in_unaffected": False, "depends_on": ["AROM"]},
+    "FCTRLLOW": {"in_unaffected": True, "depends_on": ["AROM"]},
+    "FCTRLMED": {"in_unaffected": True, "depends_on": ["AROM"]},
+    "FCTRLHIGH": {"in_unaffected": True, "depends_on": ["AROM"]},
+    "PROP": {"in_unaffected": True, "depends_on": ["PROM"]},
 }
 
 # Mech/task status stylesheet
@@ -631,10 +620,31 @@ def get_task_constants(task):
         raise ValueError(f"Unknown task: {task}")
 
 
-def is_task_included(taskname: str, limb: str, afflimb: str, subjtype: str) -> bool:
-    """Function to check if the given task into be included in the assessment
-    for the given subjectype, limb, and affected limb.
-    """
-    _typeflag: bool = subjtype in TASK_DEPENDENCIES[taskname]["in_subjtypes"]
-    _affflag: bool = TASK_DEPENDENCIES[taskname]["in_unaffected"] or limb == afflimb
-    return _typeflag and _affflag
+def is_task_included(taskname: str, limb: str, afflimb: str) -> bool:
+    """Whether the task is included for the given limb and affected limb.
+    Subject type is no longer used (all subjects are stroke)."""
+    return TASK_DEPENDENCIES[taskname]["in_unaffected"] or limb == afflimb
+
+
+def assessment_protocol_path(subjid: str, limb: str, timepoint: str) -> pathlib.Path:
+    """Path to the assessment protocol CSV for a subject/limb/timepoint."""
+    return pathlib.Path(
+        DATA_DIR, subjid, limb, timepoint,
+        f"{subjid}_{limb}_{timepoint}_protocol.csv",
+    )
+
+
+def is_assessment_timepoint_completed(subjid: str, limb: str, timepoint: str) -> bool:
+    """True if the assessment protocol for this timepoint exists and has no
+    unfinished (NaN session) rows."""
+    _proto = assessment_protocol_path(subjid, limb, timepoint)
+    if not _proto.exists():
+        return False
+    try:
+        _df = pd.read_csv(
+            _proto.as_posix(), header=0, index_col=None,
+            dtype=SUMMARY_COLUMN_FORMAT,
+        )
+        return not _df["session"].isna().any()
+    except Exception:
+        return False
