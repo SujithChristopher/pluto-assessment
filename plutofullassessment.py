@@ -156,8 +156,8 @@ QLineEdit:disabled {
     color: #9aa0a6;
 }
 QRadioButton {
-    spacing: 6px;
-    padding: 2px;
+    spacing: 8px;
+    padding: 2px 12px 2px 2px;
     background: transparent;
 }
 QRadioButton::indicator {
