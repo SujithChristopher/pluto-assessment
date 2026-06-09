@@ -41,8 +41,7 @@ from uipy.ui_plutofullassessment import Ui_PlutoFullAssessor
 
 import plutodefs as pdef
 import plutofullassessdef as pfadef
-from subjectcreator import SubjectCreator
-from subjectselector import SubjectSelector
+from sessionsetupwindow import SessionSetupWindow
 from plutofullassessstatemachine import PlutoFullAssessmentStateMachine
 from plutofullassessstatemachine import Events, States
 from plutofullassesssdata import PlutoAssessmentData
@@ -51,7 +50,7 @@ from plutoposholdwindow import PlutoPositionHoldAssessWindow
 from plutodiscreachwindow import PlutoDiscReachAssessWindow
 from plutopropassesswindow import PlutoPropAssessWindow
 from plutofullassesssdata import DataFrameModel
-from async_workers import LimbSetupWorker
+from async_workers import SessionSetupWorker
 
 
 DEBUG = False
@@ -177,18 +176,18 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         )
 
         # Initialize worker thread for async operations
-        self._limb_setup_worker = None
+        self._setup_worker = None
 
         if DEBUG:
-            self._smachine.run_statemachine(Events.SUBJECT_SET, {"subjid": "1234"})
-            _data = {"type": "Stroke", "limb": "Left"}
-            self._smachine.run_statemachine(Events.TYPE_LIMB_SET, _data)
-            # Set limb in the device.
+            self.data.setup_session({
+                "mode": "assessment", "subjid": "1234", "limb": "left",
+                "afflimb": "left", "domlimb": "right", "timepoint": "A0",
+            })
+            self.data.create_session_folder()
+            self.data.start_protocol()
             self.pluto.send_heartbeat()
             self.pluto.set_limb(self.data.limb)
-            # Set limb and type.
-            self.cbLimb.setCurrentText(_data["limb"])
-            self.cbSubjectType.setCurrentText(_data["type"])
+            self._smachine.run_statemachine(Events.SETUP_DONE, {})
 
         # Attach callback to the buttons
         self._attach_guicontrol_callbacks()
@@ -213,15 +212,8 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
     # Controls callback
     #
     def _attach_guicontrol_callbacks(self):
-        # Subject
-        self.pbCreateSeelectSubject.clicked.connect(self._callback_createselect_subject)
-        self.pbSelectSubject.clicked.connect(self._callback_select_subject)
-        # Limb
-        self.cbLimb.currentIndexChanged.connect(self.update_ui)
-        self.pbSetLimb.clicked.connect(self._callback_limb_set)
-        # Time point
-        self.cbTimePoint.currentIndexChanged.connect(self.update_ui)
-        self.pbSetTimePoint.clicked.connect(self._callback_timepoint_set)
+        # Session setup (combined subject + limb + timepoint)
+        self.pbSetupSession.clicked.connect(self._callback_setup_session)
         # Mechanisms and skip
         self.pbWFE.clicked.connect(self._callback_wfe_assess)
         self.pbWFESkip.clicked.connect(self._callback_wfe_skip)
@@ -255,136 +247,64 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         # self.pbStartMechAssessment.clicked.connect(self._callback_start_mech_assess)
         # self.pbSkipMechanismAssessment.clicked.connect(self._callback_skip_mech_assess)
 
-    def _callback_createselect_subject(self):
-        # Calibration window and open it as a modal window.
-        self._subjwnd = SubjectCreator(
-            parent=self, modal=True, onclosecb=self._subjwnd_close_event
-        )
-        # Disable main controls
+    def _callback_setup_session(self):
         self._maindisable = True
-        self._subjwnd.show()
         self._currwndclosed = False
-
-    def _callback_select_subject(self):
-        # Calibration window and open it as a modal window.
-        self._subjwnd = SubjectSelector(
-            parent=self, modal=True, onclosecb=self._subjwnd_close_event
+        self._subjwnd = SessionSetupWindow(
+            parent=self, modal=True, onclosecb=self._setupwnd_close_event
         )
-        # Disable main controls
-        self._maindisable = True
         self._subjwnd.show()
-        self._currwndclosed = False
 
-    def _callback_limb_set(self):
-        # Open dialog to confirm limb selection (Ok or cancel).
-        reply = QMessageBox.question(
-            self,
-            "Confirm",
-            f"{self.cbLimb.currentText()} limb selected.\nDo you want to continue?",
-            QMessageBox.Ok | QMessageBox.Cancel,
-        )
-        if reply == QMessageBox.Ok:
-            # set_limb() is now I/O-free — call state machine directly on main thread
-            self._smachine.run_statemachine(
-                Events.LIMB_SET, {"limb": self.cbLimb.currentText().lower()}
-            )
-            self._populate_timepoint_combobox()
-            self.update_ui()
-            self.statusBar().showMessage("Limb set. Select a time point.")
-
-    def _populate_timepoint_combobox(self):
-        """Populate cbTimePoint, disabling completed and out-of-order time points."""
-        model = self.cbTimePoint.model()
-        first_available = 0
-        for i, tp in enumerate(pfadef.TIMEPOINTS):
-            # item index 0 is the blank entry, timepoints start at index 1
-            item_index = i + 1
-            item = model.item(item_index)
-            if item is None:
-                continue
-            completed = self.data.is_timepoint_completed(self.data.limb, tp)
-            prior_done = all(
-                self.data.is_timepoint_completed(self.data.limb, pfadef.TIMEPOINTS[j])
-                for j in range(i)
-            )
-            if completed or not prior_done:
-                item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEnabled)
-            else:
-                item.setFlags(item.flags() | QtCore.Qt.ItemIsEnabled)
-                if first_available == 0:
-                    first_available = item_index
-        self.cbTimePoint.setCurrentIndex(first_available)
-
-    def _callback_timepoint_set(self):
-        """Handle Set Time Point button click."""
-        tp = self.cbTimePoint.currentText()
-        if not tp:
+    def _setupwnd_close_event(self, data):
+        if self._currwndclosed is True:
+            self._subjwnd = None
             return
-        tp_index = pfadef.TIMEPOINTS.index(tp) if tp in pfadef.TIMEPOINTS else -1
-        if tp_index > 0:
-            prev_tp = pfadef.TIMEPOINTS[tp_index - 1]
-            if not self.data.is_timepoint_completed(self.data.limb, prev_tp):
-                QMessageBox.warning(
-                    self,
-                    "Timepoint Order Error",
-                    f"Cannot select {tp}: {prev_tp} has not been completed yet.",
-                )
-                return
-        reply = QMessageBox.question(
-            self,
-            "Confirm",
-            f"Time point {tp} selected. Continue?",
-            QMessageBox.Ok | QMessageBox.Cancel,
-        )
-        if reply == QMessageBox.Ok:
-            self.pbSetTimePoint.setEnabled(False)
+        self._currwndclosed = True
+        self._maindisable = False
+        if data:
+            # Store fields, then build folder + protocol off the UI thread.
+            self.data.setup_session(data)
             self.statusBar().showMessage("Creating session folder and protocol... Please wait.")
-            self._limb_setup_worker = LimbSetupWorker(self.data, tp)
-            self._limb_setup_worker.progress.connect(self._on_timepoint_worker_progress)
-            self._limb_setup_worker.finished.connect(self._on_timepoint_worker_finished)
-            self._limb_setup_worker.error.connect(self._on_timepoint_worker_error)
-            self._limb_setup_worker.start()
+            self._maindisable = True
+            self._setup_worker = SessionSetupWorker(self.data)
+            self._setup_worker.progress.connect(self._on_setup_worker_progress)
+            self._setup_worker.finished.connect(self._on_setup_worker_finished)
+            self._setup_worker.error.connect(self._on_setup_worker_error)
+            self._setup_worker.start()
+        else:
+            self._updatetable = True
+            self.update_ui()
 
-    def _on_timepoint_worker_progress(self, message):
-        """Handle progress updates from timepoint worker thread."""
+    def _on_setup_worker_progress(self, message):
         self.statusBar().showMessage(message)
 
-    def _on_timepoint_worker_finished(self):
-        """Handle timepoint worker thread completion."""
+    def _on_setup_worker_finished(self):
         try:
-            self.statusBar().showMessage("Finalizing setup...")
-            self._smachine.run_statemachine(
-                Events.TIMEPOINT_SET, {"timepoint": self.data.timepoint}
-            )
-            self._title = " | ".join(
-                [
-                    "Pluto Full Assessment",
-                    self.data.subjid,
-                    self.data.type,
-                    f"Dom: {self.data.domlimb}",
-                    f"Aff: {self.data.afflimb}",
-                    f"Limb: {self.data.limb}",
-                    f"TP: {self.data.timepoint}",
-                    f"{self.data.session}",
-                ]
-            )
+            self._smachine.run_statemachine(Events.SETUP_DONE, {})
+            self._subjdetails = self._get_subject_details()
+            self._title = " | ".join([
+                "Pluto Full Assessment", self.data.subjid, self.data.mode,
+                f"Dom: {self.data.domlimb}", f"Aff: {self.data.afflimb}",
+                f"Limb: {self.data.limb}",
+                f"TP: {self.data.timepoint}" if not self.data.is_screening else "screening",
+                f"{self.data.session}",
+            ])
             self.setWindowTitle(self._title)
-            self.update_ui()
-            self.statusBar().showMessage("Time point setup completed successfully.")
+            self.statusBar().showMessage("Session setup completed successfully.")
         except Exception as e:
-            self._on_timepoint_worker_error(f"Error updating UI after setup: {str(e)}")
+            self._on_setup_worker_error(f"Error updating UI after setup: {str(e)}")
         finally:
-            self.pbSetTimePoint.setEnabled(True)
-            self._limb_setup_worker = None
+            self._maindisable = False
+            self._updatetable = True
+            self._setup_worker = None
+            self.update_ui()
 
-    def _on_timepoint_worker_error(self, error_message):
-        """Handle errors from timepoint worker thread."""
-        self.pbSetTimePoint.setEnabled(True)
-        self._limb_setup_worker = None
-        QMessageBox.critical(
-            self, "Error", f"Error during time point setup:\n{error_message}"
-        )
-        self.statusBar().showMessage("Error during time point setup.")
+    def _on_setup_worker_error(self, error_message):
+        self._maindisable = False
+        self._setup_worker = None
+        QMessageBox.critical(self, "Error", f"Error during session setup:\n{error_message}")
+        self.statusBar().showMessage("Error during session setup.")
+        self.update_ui()
 
     def _callback_calibrate(self):
         # Disable main controls
@@ -415,7 +335,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self._romwnd = PlutoAPRomAssessWindow(
             plutodev=self.pluto,
             assessinfo={
-                "type": self.data.type,
+                "type": "stroke",
                 "limb": self.data.limb,
                 "mechanism": self.protocol.mech,
                 "romtype": pfadef.ROMType.ACTIVE,
@@ -456,7 +376,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self._romwnd = PlutoAPRomAssessWindow(
             plutodev=self.pluto,
             assessinfo={
-                "type": self.data.type,
+                "type": "stroke",
                 "limb": self.data.limb,
                 "mechanism": self.protocol.mech,
                 "romtype": pfadef.ROMType.PASSIVE,
@@ -494,7 +414,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self._romwnd = PlutoAssistPRomAssessWindow(
             plutodev=self.pluto,
             assessinfo={
-                "type": self.data.type,
+                "type": "stroke",
                 "limb": self.data.limb,
                 "mechanism": self.protocol.mech,
                 "session": self.data.session,
@@ -536,7 +456,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             plutodev=self.pluto,
             assessinfo={
                 "subjid": self.data.subjid,
-                "type": self.data.type,
+                "type": "stroke",
                 "limb": self.data.limb,
                 "mechanism": self.protocol.mech,
                 "session": self.data.session,
@@ -576,7 +496,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             plutodev=self.pluto,
             assessinfo={
                 "subjid": self.data.subjid,
-                "type": self.data.type,
+                "type": "stroke",
                 "limb": self.data.limb,
                 "mechanism": self.protocol.mech,
                 "session": self.data.session,
@@ -614,7 +534,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             plutodev=self.pluto,
             assessinfo={
                 "subjid": self.data.subjid,
-                "type": self.data.type,
+                "type": "stroke",
                 "limb": self.data.limb,
                 "mechanism": self.protocol.mech,
                 "session": self.data.session,
@@ -653,7 +573,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             plutodev=self.pluto,
             assessinfo={
                 "subjid": self.data.subjid,
-                "type": self.data.type,
+                "type": "stroke",
                 "limb": self.data.limb,
                 "mechanism": self.protocol.mech,
                 "session": self.data.session,
@@ -695,7 +615,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             plutodev=self.pluto,
             assessinfo={
                 "subjid": self.data.subjid,
-                "type": self.data.type,
+                "type": "stroke",
                 "limb": self.data.limb,
                 "mechanism": self.protocol.mech,
                 "session": self.data.session,
@@ -737,7 +657,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             plutodev=self.pluto,
             assessinfo={
                 "subjid": self.data.subjid,
-                "type": self.data.type,
+                "type": "stroke",
                 "limb": self.data.limb,
                 "mechanism": self.protocol.mech,
                 "session": self.data.session,
@@ -768,18 +688,6 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
                 Events.FCTRLHIGH_SKIP,
                 {"comment": _skipcomment, "session": self.data.session},
             )
-        self.update_ui()
-
-    def _callback_subjtype_select(self):
-        # Reset AROM and PROM values if the current selection is different.
-        if self._subjdetails["type"] != self.cbSubjectType.currentText():
-            self._romdata["AROM"] = 0
-            self._romdata["PROM"] = 0
-        self._subjdetails["type"] = self.cbSubjectType.currentText()
-        # Reset the limb and grip type.
-        self._subjdetails["limb"] = ""
-        self.cbLimb.setCurrentIndex(0)
-        self._subjdetails["grip"] = ""
         self.update_ui()
 
     def _callback_wfe_assess(self):
@@ -962,32 +870,6 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
     #
     # Other callbacks
     #
-    def _subjwnd_close_event(self, data):
-        # Check if the window is already closed.
-        if self._currwndclosed is True:
-            self._subjwnd = None
-            return
-        # Run the state machine.
-        if data:
-            self._smachine.run_statemachine(Events.SUBJECT_SET, data)
-            self._subjdetails = self._get_subject_details()
-            self._title = " | ".join(
-                [
-                    "Pluto Full Assessment",
-                    self.data.subjid,
-                    self.data.type,
-                    f"Dom: {self.data.domlimb}",
-                    f"Aff: {self.data.afflimb}",
-                ]
-            )
-        # Reenable main controls
-        self._maindisable = False
-        # Update the Table.
-        self._updatetable = True
-        # Set the window closed flag.
-        self._currwndclosed = True
-        self.update_ui()
-
     def _calibwnd_close_event(self, data=None):
         # Check if the window is already closed.
         if self._currwndclosed is True:
@@ -1248,36 +1130,11 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
     #
     def update_ui(self):
         self.setWindowTitle(self._title)
-        # Select subject
-        self.pbCreateSeelectSubject.setEnabled(
+        # Session setup
+        self.pbSetupSession.setEnabled(
             self._maindisable is False and self._smachine.state == States.SUBJ_SELECT
-        )
-        self.pbSelectSubject.setEnabled(
-            self._maindisable is False and self._smachine.state == States.SUBJ_SELECT
-        )
-
-        # Limb selection
-        _lmbflag = (
-            self._maindisable is False and self._smachine.state == States.LIMB_SELECT
         )
         self.lblSubjDetails.setText(self._subjdetails)
-        self.lblLimb.setEnabled(_lmbflag)
-        self.cbLimb.setEnabled(_lmbflag)
-        self.pbSetLimb.setEnabled(
-            self.cbLimb.currentText() != ""
-            and self._smachine.state == States.LIMB_SELECT
-        )
-
-        # Time point selection
-        _tpflag = (
-            self._maindisable is False
-            and self._smachine.state == States.TIMEPOINT_SELECT
-        )
-        self.lblTimePoint.setEnabled(_tpflag)
-        self.cbTimePoint.setEnabled(_tpflag)
-        self.pbSetTimePoint.setEnabled(
-            _tpflag and self.cbTimePoint.currentText() != ""
-        )
 
         # Update the table.
         if self.protocol and self.protocol.df is not None and self._updatetable:
@@ -1330,10 +1187,9 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
     #
     def _get_subject_details(self):
         """Get the subject details string."""
-        _text = f"{self.data.subjid}"
-        _text += f" | Dom: {self.data.domlimb:<6}"
-        if self.data.type == "stroke":
-            _text += f" | Aff: {self.data.afflimb:<6}"
+        _text = f"{self.data.subjid} | Aff: {self.data.afflimb}"
+        if not self.data.is_screening:
+            _text += f" | Dom: {self.data.domlimb}"
         return _text
 
     def _one_time_setup(self):
@@ -1368,20 +1224,24 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         """
         vl = self.verticalLayout
 
-        # Subject & Session: subject buttons, details, limb, time point.
+        # Subject & Session: a single Setup Session button + details label.
         self.gbSession = QtWidgets.QGroupBox("Subject && Session")
         sv = QtWidgets.QVBoxLayout(self.gbSession)
         sv.setSpacing(4)
-        for _item in (
-            self.pbCreateSeelectSubject,
-            self.pbSelectSubject,
-            self.lblSubjDetails,
-            self.horizontalLayout_2,
-            self.pbSetLimb,
-            self.horizontalLayout_timepoint,
-            self.pbSetTimePoint,
+        self.pbSetupSession = QtWidgets.QPushButton("Setup Session")
+        sv.addWidget(self.pbSetupSession)
+        self._move_into(vl, sv, self.lblSubjDetails)
+        # Old per-field controls from the .ui are no longer used — drop them.
+        for _old in (
+            self.pbCreateSeelectSubject, self.pbSelectSubject,
+            self.horizontalLayout_2, self.pbSetLimb,
+            self.horizontalLayout_timepoint, self.pbSetTimePoint,
         ):
-            self._move_into(vl, sv, _item)
+            if isinstance(_old, QtWidgets.QWidget):
+                _old.setParent(None)
+            else:
+                # nested layout: reparent under a throwaway widget so it is removed
+                QtWidgets.QWidget().setLayout(_old)
 
         # Tasks: calibrate + all per-task rows.
         self.gbTasks = QtWidgets.QGroupBox("Tasks")
@@ -1420,9 +1280,9 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _str = [
             f"{'' if self.data.session is None else self.data.session:<20}",
             f"{'' if self.data.subjid is None else self.data.subjid:<8}",
-            f"{self.data.type if self.data.type is not None else '':<8}",
-            f"{self.data.limb if self.data.limb is not None else '':<8}",
-            f"{self.data.timepoint if self.data.timepoint is not None else '':<4}",
+            f"{(self.data.mode or ''):<10}",
+            f"{(self.data.limb or ''):<8}",
+            f"{(self.data.timepoint or ''):<4}",
         ]
         return ":".join(_str)
 
