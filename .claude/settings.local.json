@@ -36,7 +36,23 @@
       "Bash(git show *)",
       "Read(//tmp/**)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git commit -q -m 'docs: design for screening/assessment session setup *)",
+      "Bash(git commit -q -m 'docs: screening screens the affected limb \\(limb = afflimb\\) *)",
+      "Bash(git commit -q -m 'docs: implementation plan for screening/assessment session setup *)",
+      "Bash(git commit -m 'feat\\(defs\\): screening constants, drop subjtype from task inclusion, timepoint helpers *)",
+      "PowerShell(uv run *)",
+      "PowerShell(git *)",
+      "Bash(git commit -m 'refactor\\(data\\): screening builder uses SCREENING_MECH_TASKS; test screening details json *)",
+      "Bash(git rm *)",
+      "Bash(QT_QPA_PLATFORM=offscreen uv run *)",
+      "Bash(git commit -q -m 'feat\\(ui\\): SessionSetupWindow combining mode/subject/limb/timepoint *)",
+      "Bash(git commit -q -m 'feat\\(sm\\): collapse subject/limb/timepoint into single SETUP_DONE *)",
+      "Bash(git commit -q -m 'feat\\(main\\): single Setup Session flow; drop limb/timepoint controls and type *)",
+      "Bash(git commit -q -m 'chore: remove old subject create/select windows *)",
+      "Bash(git commit -q -m 'fix\\(main\\): detach nested layouts before discarding in _group_left_column *)",
+      "Bash(rm -f docs/_setup_assessment.png docs/_setup_screening.png)",
+      "Bash(git commit -q -m 'style\\(ui\\): clinical theme + card-based Session Setup window *)"
     ]
   }
 }

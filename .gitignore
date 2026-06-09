@@ -170,3 +170,4 @@ diff_history.txt
 diff_history_6m.txt
 rawfiletest.csv
 summaryfiletest.csv
+.claude/settings.local.json
