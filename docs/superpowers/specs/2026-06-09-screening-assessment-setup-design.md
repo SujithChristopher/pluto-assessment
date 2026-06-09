@@ -18,7 +18,7 @@ with stroke subjects.
 | Subject entry | Unified Subject ID box. Existing id → load + lock fields. New id → editable + create. |
 | Screening protocol | AROM only, all four mechanisms (FPS, WFE, WURD, HOC). Own shorter protocol. |
 | Screening folder | Single-shot, no timepoint: `screening/{subjid}/{limb}/{session}/`. |
-| Screening affected | Record affected side. No dominant hand. No healthy/stroke. |
+| Screening affected | Screened limb **is** the affected limb (limb = afflimb, single selector). No dominant hand. No healthy/stroke. |
 | Subject lists | Separate per directory: `screening_subjects.csv`, `fullassess_subjects.csv`. |
 | Task inclusion | Drop `subjtype` check (always stroke). Keep `limb==afflimb` gate for AROM/PROM/APROM. |
 | Migration | Fresh start. No conversion of old `fullassessment/{type}/...` data. |
@@ -36,8 +36,8 @@ timepoint controls. One modal window returning a single setup dict.
 │  Subject ID: [__________]  (unified box)  │
 │      → exists: loads fields, locks them   │
 │      → new:    fields editable, creates   │
-│  Limb being assessed:  [Left ▾]           │
-│  Affected side:        [Left ▾]           │
+│  Affected side:        [Left ▾]           │  ← screening: this IS the screened limb
+│  Limb being assessed:  [Left ▾]   ← assessment only
 │  Dominant hand:        [Right ▾]  ← assessment only
 │  Time point:           [A0 ▾]     ← assessment only
 │            [ Start ]   [ Cancel ]         │
@@ -45,8 +45,9 @@ timepoint controls. One modal window returning a single setup dict.
 ```
 
 Behaviour:
-- Mode radio drives which fields are visible. Screening hides Dominant hand and
-  Time point. Assessment shows all.
+- Mode radio drives which fields are visible. Screening shows only Affected side
+  (which is the screened limb); it hides the separate Limb selector, Dominant
+  hand, and Time point. Assessment shows all.
 - Subject ID box: on editing-finished, look the id up in the mode-appropriate
   subjects CSV. If found, populate and lock the subject-level fields
   (afflimb; domlimb for assessment). If not found, fields stay editable and the
@@ -61,7 +62,7 @@ Returned dict shape:
 {
   "mode": "screening" | "assessment",
   "subjid": str,
-  "limb": "left" | "right",
+  "limb": "left" | "right",            # screening: equals afflimb
   "afflimb": "left" | "right",
   "domlimb": "left" | "right" | "",   # "" for screening
   "timepoint": "A0"|"A1"|"A2"|"",      # "" for screening
@@ -99,9 +100,9 @@ the new code. Accepted (fresh start).
 
 - New `SCREENING_MECH_TASKS = {m: [["AROM"]] for m in MECHANISMS}` in
   `plutofullassessdef.py`. AROM only, all four mechanisms.
-- Dedicated screening protocol builder adds AROM rows for all four mechanisms
-  for the chosen limb; it does not apply the affected-side gate (screening runs
-  on whatever limb is chosen). Reuses `AROM.NO_OF_TRIALS`.
+- Dedicated screening protocol builder adds AROM rows for all four mechanisms.
+  The screened limb is always the affected limb (limb = afflimb), so the
+  affected-side gate is satisfied by construction. Reuses `AROM.NO_OF_TRIALS`.
 - Assessment `is_task_included(taskname, limb, afflimb)` — `subjtype` parameter
   removed. Keeps `in_unaffected or limb == afflimb` gate.
 - `TASK_DEPENDENCIES`: remove the `in_subjtypes` key from every entry.
