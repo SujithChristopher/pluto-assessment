@@ -1232,6 +1232,9 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         sv.addWidget(self.pbSetupSession)
         self._move_into(vl, sv, self.lblSubjDetails)
         # Old per-field controls from the .ui are no longer used — drop them.
+        # Holders keep the discarded nested layouts (and their child widgets)
+        # owned/hidden so PySide does not garbage-collect them mid-teardown.
+        self._discarded_widgets = []
         for _old in (
             self.pbCreateSeelectSubject, self.pbSelectSubject,
             self.horizontalLayout_2, self.pbSetLimb,
@@ -1240,8 +1243,12 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             if isinstance(_old, QtWidgets.QWidget):
                 _old.setParent(None)
             else:
-                # nested layout: reparent under a throwaway widget so it is removed
-                QtWidgets.QWidget().setLayout(_old)
+                # Nested layout: detach from its parent layout first, then hand
+                # it to a hidden holder widget (now legal — it has no parent).
+                vl.removeItem(_old)
+                _holder = QtWidgets.QWidget()
+                _holder.setLayout(_old)
+                self._discarded_widgets.append(_holder)
 
         # Tasks: calibrate + all per-task rows.
         self.gbTasks = QtWidgets.QGroupBox("Tasks")
