@@ -119,23 +119,26 @@ QPushButton#btnPrimary:disabled {
     color: #eef2ff;
     border-color: #b9c5e6;
 }
+/* Leave the QComboBox frame, drop-down arrow and popup to the Fusion style so
+   they always render. Styling the combobox border/::drop-down in QSS suppresses
+   the native arrow and the popup list (the "invisible picker" bug). We only tidy
+   the editable inner line edit and give the popup nicer selection colours. */
 QComboBox {
+    min-height: 22px;
+    padding: 2px 6px;
+}
+QComboBox QLineEdit {
+    border: none;
+    background: transparent;
+    padding: 0 2px;
+}
+QComboBox QAbstractItemView {
     background-color: #ffffff;
     border: 1px solid #c4c9cf;
-    border-radius: 6px;
-    padding: 3px 6px;
-    min-height: 20px;
-}
-QComboBox:focus {
-    border-color: #2563eb;
-}
-QComboBox:disabled {
-    background-color: #f1f3f4;
-    color: #9aa0a6;
-}
-QComboBox::drop-down {
-    border: none;
-    width: 18px;
+    selection-background-color: #2563eb;
+    selection-color: #ffffff;
+    outline: 0;
+    padding: 2px;
 }
 QLineEdit {
     background-color: #ffffff;
@@ -1527,9 +1530,41 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         event.accept()
 
 
+def _build_palette() -> QtGui.QPalette:
+    """Light clinical palette. Drives the Fusion style so every native control
+    (combobox arrows, popups, scrollbars, spin boxes) renders consistently
+    without per-widget stylesheet hacks."""
+    c = QtGui.QColor
+    pal = QtGui.QPalette()
+    pal.setColor(QtGui.QPalette.Window, c("#f4f6f8"))
+    pal.setColor(QtGui.QPalette.WindowText, c("#202124"))
+    pal.setColor(QtGui.QPalette.Base, c("#ffffff"))
+    pal.setColor(QtGui.QPalette.AlternateBase, c("#f7f9fb"))
+    pal.setColor(QtGui.QPalette.Text, c("#202124"))
+    pal.setColor(QtGui.QPalette.Button, c("#ffffff"))
+    pal.setColor(QtGui.QPalette.ButtonText, c("#202124"))
+    pal.setColor(QtGui.QPalette.Highlight, c("#2563eb"))
+    pal.setColor(QtGui.QPalette.HighlightedText, c("#ffffff"))
+    pal.setColor(QtGui.QPalette.ToolTipBase, c("#1f2937"))
+    pal.setColor(QtGui.QPalette.ToolTipText, c("#ffffff"))
+    pal.setColor(QtGui.QPalette.PlaceholderText, c("#9aa0a6"))
+    for _role in (QtGui.QPalette.Text, QtGui.QPalette.ButtonText,
+                  QtGui.QPalette.WindowText):
+        pal.setColor(QtGui.QPalette.Disabled, _role, c("#9aa0a6"))
+    return pal
+
+
+def apply_theme(app: QtWidgets.QApplication):
+    """Apply the Fusion style + palette + light stylesheet. Shared so the
+    standalone Session Setup preview and the main app look identical."""
+    app.setStyle("Fusion")
+    app.setPalette(_build_palette())
+    app.setStyleSheet(APP_STYLESHEET)
+
+
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
-    app.setStyleSheet(APP_STYLESHEET)
+    apply_theme(app)
     mywin = PlutoFullAssesor(pfadef.PLUTOCOMM)
     # ImageUpdate()
     mywin.show()
