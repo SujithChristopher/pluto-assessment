@@ -51,9 +51,7 @@ from plutofullassesssdata import PlutoAssessmentData
 
 
 class Events(Enum):
-    SUBJECT_SET = 0
-    LIMB_SET = auto()
-    TIMEPOINT_SET = auto()
+    SETUP_DONE = 0
     #
     # Mechanisms events
     #
@@ -180,8 +178,6 @@ class Events(Enum):
 
 class States(Enum):
     SUBJ_SELECT = 0
-    LIMB_SELECT = auto()
-    TIMEPOINT_SELECT = auto()
     MECH_SELECT = auto()
     MECH_OR_TASK_SELECT = auto()
     CALIBRATE = auto()
@@ -213,8 +209,6 @@ class PlutoFullAssessmentStateMachine:
         self._pluto = plutodev
         self._stateactions = {
             States.SUBJ_SELECT: self._handle_subject_select,
-            States.LIMB_SELECT: self._handle_limb_select,
-            States.TIMEPOINT_SELECT: self._handle_timepoint_select,
             States.MECH_SELECT: self._handle_mechanism_select,
             States.CALIBRATE: self._handle_calibrate,
             States.AROM_ASSESS: self._handle_arom_assess,
@@ -270,35 +264,15 @@ class PlutoFullAssessmentStateMachine:
         self._stateactions[self._state](event, data)
 
     def _handle_subject_select(self, event, data):
-        """ """
-        if event == Events.SUBJECT_SET:
-            # Set the subject ID.
-            self._data.set_subject(
-                subjid=data["subjid"],
-                subjtype=data["subjtype"],
-                domlimb=data["domlimb"],
-                afflimb=data["afflimb"],
-            )
-            # We need to now select the limb.
-            self._state = States.LIMB_SELECT
-            self._pconsole.append(self._instruction)
-
-    def _handle_limb_select(self, event, data):
-        """ """
-        if event == Events.LIMB_SET:
-            # Set limb (no I/O — just stores the value).
-            self._data.set_limb(limb=data["limb"])
-            # We need to now select the time point.
-            self._state = States.TIMEPOINT_SELECT
-            self._pconsole.append(self._instruction)
-            self.log(f"Limb set to {data['limb']}. Select a time point.")
-
-    def _handle_timepoint_select(self, event, data):
-        """ """
-        if event == Events.TIMEPOINT_SET:
-            # Folder creation and protocol start are done by the worker.
+        """The Session Setup window has gathered everything and the worker has
+        created the folder + protocol. Move straight to mechanism selection."""
+        if event == Events.SETUP_DONE:
             self._state = States.MECH_SELECT
-            self.log(f"Time point set to {data['timepoint']}. Protocol started.")
+            self._pconsole.append(self._instruction)
+            self.log(
+                f"Session setup complete: {self._data.subjid} "
+                f"[{self._data.mode}] limb={self._data.limb}."
+            )
 
     def _handle_mechanism_select(self, event, data):
         """ """
