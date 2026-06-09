@@ -10,44 +10,32 @@ from PySide6.QtCore import QThread, Signal
 import traceback
 
 
-class LimbSetupWorker(QThread):
-    """Worker thread to handle blocking I/O operations for timepoint selection."""
+class SessionSetupWorker(QThread):
+    """Worker thread for the blocking I/O of session setup:
+    folder creation + protocol initialization (both screening and assessment)."""
 
-    # Signals
-    started = Signal()  # Emitted when worker starts
-    finished = Signal()  # Emitted when I/O operations complete successfully
-    error = Signal(str)  # Emitted if an error occurs
-    progress = Signal(str)  # Emitted to provide progress updates
+    started = Signal()
+    finished = Signal()
+    error = Signal(str)
+    progress = Signal(str)
 
-    def __init__(self, data_obj, timepoint_text, parent=None):
-        """
-        Initialize the worker.
-
-        Args:
-            data_obj: PlutoAssessmentData instance
-            timepoint_text: The time point (e.g., "A0", "A1", "A2")
-            parent: Parent QObject
-        """
+    def __init__(self, data_obj, parent=None):
         super().__init__(parent)
         self.data_obj = data_obj
-        self.timepoint_text = timepoint_text
 
     def run(self):
-        """Run the blocking I/O operations in the worker thread."""
         try:
             self.started.emit()
-
-            # Step 1: Set the timepoint (creates folder and JSON file) - blocking I/O
             self.progress.emit("Creating session folder...")
-            self.data_obj.set_timepoint(self.timepoint_text)
-
-            # Step 2: Initialize protocol data (reads CSV, parses with pandas) - blocking I/O
+            self.data_obj.create_session_folder()
             self.progress.emit("Initializing protocol...")
             self.data_obj.start_protocol()
-
-            # All I/O operations completed successfully
             self.finished.emit()
-
         except Exception as e:
-            error_msg = f"Error during timepoint setup: {str(e)}\n{traceback.format_exc()}"
-            self.error.emit(error_msg)
+            self.error.emit(
+                f"Error during session setup: {str(e)}\n{traceback.format_exc()}"
+            )
+
+
+# Backwards-compatible alias (old name still referenced until main window is updated).
+LimbSetupWorker = SessionSetupWorker
