@@ -85,7 +85,7 @@ QPushButton {
     background-color: #ffffff;
     border: 1px solid #c4c9cf;
     border-radius: 6px;
-    padding: 5px 10px;
+    padding: 5px 12px;
 }
 QPushButton:hover {
     background-color: #eef2f7;
@@ -99,35 +99,128 @@ QPushButton:disabled {
     background-color: #f1f3f4;
     border-color: #e3e6ea;
 }
+/* Primary / accent action button. Set objectName("btnPrimary"). */
+QPushButton#btnPrimary {
+    background-color: #2563eb;
+    color: #ffffff;
+    border: 1px solid #1d4ed8;
+    font-weight: 600;
+    padding: 6px 16px;
+}
+QPushButton#btnPrimary:hover {
+    background-color: #1d4ed8;
+    border-color: #1e40af;
+}
+QPushButton#btnPrimary:pressed {
+    background-color: #1e40af;
+}
+QPushButton#btnPrimary:disabled {
+    background-color: #b9c5e6;
+    color: #eef2ff;
+    border-color: #b9c5e6;
+}
 QComboBox {
     background-color: #ffffff;
     border: 1px solid #c4c9cf;
     border-radius: 6px;
     padding: 3px 6px;
+    min-height: 20px;
+}
+QComboBox:focus {
+    border-color: #2563eb;
 }
 QComboBox:disabled {
     background-color: #f1f3f4;
     color: #9aa0a6;
 }
+QComboBox::drop-down {
+    border: none;
+    width: 18px;
+}
+QLineEdit {
+    background-color: #ffffff;
+    border: 1px solid #c4c9cf;
+    border-radius: 6px;
+    padding: 4px 8px;
+    selection-background-color: #2563eb;
+    selection-color: #ffffff;
+}
+QLineEdit:focus {
+    border-color: #2563eb;
+}
+QLineEdit:disabled {
+    background-color: #f1f3f4;
+    color: #9aa0a6;
+}
+QRadioButton {
+    spacing: 6px;
+    padding: 2px;
+    background: transparent;
+}
+QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+}
+QRadioButton::indicator:unchecked {
+    border: 1px solid #c4c9cf;
+    border-radius: 9px;
+    background: #ffffff;
+}
+QRadioButton::indicator:checked {
+    border: 5px solid #2563eb;
+    border-radius: 9px;
+    background: #ffffff;
+}
 QLabel {
     background: transparent;
+}
+/* Window header / subtitle helpers (set objectName). */
+QLabel#lblTitle {
+    font-size: 15pt;
+    font-weight: 600;
+    color: #1f2937;
+}
+QLabel#lblSubtitle {
+    color: #6b7280;
+}
+QLabel#lblHint {
+    color: #2563eb;
+}
+QFrame#hsep {
+    background-color: #e5e7eb;
+    max-height: 1px;
+    min-height: 1px;
+    border: none;
 }
 QTableView {
     border: 1px solid #d0d4d9;
     border-radius: 6px;
     background-color: #ffffff;
     gridline-color: #e8eaed;
+    alternate-background-color: #f7f9fb;
+    selection-background-color: #dbe6fe;
+    selection-color: #1f2937;
 }
 QHeaderView::section {
     background-color: #eceff1;
     border: none;
     border-right: 1px solid #e0e3e7;
+    border-bottom: 1px solid #d0d4d9;
     padding: 4px 6px;
     color: #3c4043;
+    font-weight: 600;
 }
 QStatusBar {
     background-color: #eceff1;
     color: #3c4043;
+    border-top: 1px solid #d8dce0;
+}
+QToolTip {
+    background-color: #1f2937;
+    color: #ffffff;
+    border: none;
+    padding: 4px 6px;
+    border-radius: 4px;
 }
 """
 
@@ -1139,6 +1232,8 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         # Update the table.
         if self.protocol and self.protocol.df is not None and self._updatetable:
             self.tableProtocolProgress.setModel(DataFrameModel(self.protocol.df))
+            self.tableProtocolProgress.setAlternatingRowColors(True)
+            self.tableProtocolProgress.horizontalHeader().setStretchLastSection(True)
             # Optional: also shrink rows to contents
             self.tableProtocolProgress.resizeRowsToContents()
             # Set fixed row height for uniformity
@@ -1229,6 +1324,8 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         sv = QtWidgets.QVBoxLayout(self.gbSession)
         sv.setSpacing(4)
         self.pbSetupSession = QtWidgets.QPushButton("Setup Session")
+        self.pbSetupSession.setObjectName("btnPrimary")
+        self.pbSetupSession.setMinimumHeight(34)
         sv.addWidget(self.pbSetupSession)
         self._move_into(vl, sv, self.lblSubjDetails)
         # Old per-field controls from the .ui are no longer used — drop them.

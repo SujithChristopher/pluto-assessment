@@ -71,7 +71,25 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
     def _build_ui(self):
         central = QtWidgets.QWidget()
         self.setCentralWidget(central)
-        form = QtWidgets.QFormLayout(central)
+        outer = QtWidgets.QVBoxLayout(central)
+        outer.setContentsMargins(20, 18, 20, 16)
+        outer.setSpacing(12)
+
+        # Header
+        title = QtWidgets.QLabel("Session Setup")
+        title.setObjectName("lblTitle")
+        subtitle = QtWidgets.QLabel(
+            "Choose a mode, create or select a subject, and configure the session."
+        )
+        subtitle.setObjectName("lblSubtitle")
+        subtitle.setWordWrap(True)
+        outer.addWidget(title)
+        outer.addWidget(subtitle)
+
+        sep = QtWidgets.QFrame()
+        sep.setObjectName("hsep")
+        sep.setFrameShape(QtWidgets.QFrame.HLine)
+        outer.addWidget(sep)
 
         # Mode radios
         self.rbScreening = QtWidgets.QRadioButton("Screening")
@@ -81,14 +99,27 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
         self.modeGroup.addButton(self.rbScreening)
         self.modeGroup.addButton(self.rbAssessment)
         _moderow = QtWidgets.QHBoxLayout()
+        _moderow.setSpacing(18)
+        _moderow.addWidget(QtWidgets.QLabel("Mode:"))
         _moderow.addWidget(self.rbScreening)
         _moderow.addWidget(self.rbAssessment)
-        form.addRow("Mode:", _moderow)
+        _moderow.addStretch(1)
+        outer.addLayout(_moderow)
+
+        # Subject details card
+        self.gbDetails = QtWidgets.QGroupBox("Subject details")
+        form = QtWidgets.QFormLayout(self.gbDetails)
+        form.setLabelAlignment(QtCore.Qt.AlignRight)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(10)
+        form.setContentsMargins(14, 14, 14, 12)
 
         self.txtSubjID = QtWidgets.QLineEdit()
+        self.txtSubjID.setPlaceholderText("e.g. p001")
         form.addRow("Subject ID:", self.txtSubjID)
 
         self.lblExisting = QtWidgets.QLabel("")
+        self.lblExisting.setObjectName("lblHint")
         form.addRow("", self.lblExisting)
 
         self.cbAff = QtWidgets.QComboBox(); self.cbAff.addItems(self.SIDES)
@@ -107,11 +138,23 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
         self.lblTP = QtWidgets.QLabel("Time point:")
         form.addRow(self.lblTP, self.cbTP)
 
+        outer.addWidget(self.gbDetails)
+        outer.addStretch(1)
+
+        # Buttons
         _btnrow = QtWidgets.QHBoxLayout()
         self.pbStart = QtWidgets.QPushButton("Start")
+        self.pbStart.setObjectName("btnPrimary")
+        self.pbStart.setMinimumHeight(34)
+        self.pbStart.setMinimumWidth(110)
         self.pbCancel = QtWidgets.QPushButton("Cancel")
-        _btnrow.addWidget(self.pbStart); _btnrow.addWidget(self.pbCancel)
-        form.addRow(_btnrow)
+        self.pbCancel.setMinimumHeight(34)
+        _btnrow.addStretch(1)
+        _btnrow.addWidget(self.pbCancel)
+        _btnrow.addWidget(self.pbStart)
+        outer.addLayout(_btnrow)
+
+        self.setMinimumWidth(440)
 
     def _wire(self):
         self.rbScreening.toggled.connect(self._on_mode_changed)
