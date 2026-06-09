@@ -114,8 +114,16 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
         form.setVerticalSpacing(10)
         form.setContentsMargins(14, 14, 14, 12)
 
-        self.txtSubjID = QtWidgets.QLineEdit()
-        self.txtSubjID.setPlaceholderText("e.g. p001")
+        # Editable combobox: pick an existing subject from the dropdown OR type
+        # a new id. Autocomplete filters as you type.
+        self.txtSubjID = QtWidgets.QComboBox()
+        self.txtSubjID.setEditable(True)
+        self.txtSubjID.setInsertPolicy(QtWidgets.QComboBox.NoInsert)
+        self.txtSubjID.lineEdit().setPlaceholderText("Pick existing or type new (e.g. p001)")
+        _comp = self.txtSubjID.completer()
+        _comp.setCompletionMode(QtWidgets.QCompleter.PopupCompletion)
+        _comp.setFilterMode(QtCore.Qt.MatchContains)
+        _comp.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
         form.addRow("Subject ID:", self.txtSubjID)
 
         self.lblExisting = QtWidgets.QLabel("")
@@ -158,11 +166,28 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
 
     def _wire(self):
         self.rbScreening.toggled.connect(self._on_mode_changed)
-        self.txtSubjID.editingFinished.connect(self._on_subjid_changed)
+        # editingFinished: typed an id and left the box. activated: picked from
+        # the dropdown. Both re-run the existing-subject lookup.
+        self.txtSubjID.lineEdit().editingFinished.connect(self._on_subjid_changed)
+        self.txtSubjID.activated.connect(lambda *_: self._on_subjid_changed())
+        self.txtSubjID.currentTextChanged.connect(self.update_ui)
         for _cb in (self.cbAff, self.cbLimb, self.cbDom, self.cbTP):
             _cb.currentIndexChanged.connect(self.update_ui)
         self.pbStart.clicked.connect(self._on_start)
         self.pbCancel.clicked.connect(self.close)
+
+    def _reload_subject_list(self):
+        """Populate the dropdown with existing subject ids for the current mode,
+        preserving whatever the operator has typed so far."""
+        _typed = self.txtSubjID.currentText()
+        listfile = _list_file(self.mode)
+        _ids = sorted(listfile.subjlist["subjid"].astype(str).tolist())
+        self.txtSubjID.blockSignals(True)
+        self.txtSubjID.clear()
+        self.txtSubjID.addItems(_ids)
+        self.txtSubjID.setCurrentIndex(-1)
+        self.txtSubjID.setEditText(_typed)
+        self.txtSubjID.blockSignals(False)
 
     @property
     def mode(self):
@@ -176,11 +201,12 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
     def _on_mode_changed(self, *_):
         # Screening: only affected side. Assessment: limb, dominant, timepoint too.
         self._assessment_fields_visible(self.mode == "assessment")
-        self._on_subjid_changed()  # re-lookup against the mode's list
+        self._reload_subject_list()  # the two modes have separate subject lists
+        self._on_subjid_changed()    # re-lookup against the mode's list
         self.update_ui()
 
     def _on_subjid_changed(self, *_):
-        subjid = self.txtSubjID.text().strip().lower()
+        subjid = self.txtSubjID.currentText().strip().lower()
         listfile = _list_file(self.mode)
         if subjid and listfile.subject_exists(subjid):
             info = listfile.get_subject_info(subjid)
@@ -197,14 +223,14 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
         self.update_ui()
 
     def update_ui(self):
-        ok = self.txtSubjID.text().strip() != "" and self.cbAff.currentText() != ""
+        ok = self.txtSubjID.currentText().strip() != "" and self.cbAff.currentText() != ""
         if self.mode == "assessment":
             ok = ok and self.cbLimb.currentText() != "" \
                 and self.cbDom.currentText() != "" and self.cbTP.currentText() != ""
         self.pbStart.setEnabled(ok)
 
     def _on_start(self):
-        subjid = self.txtSubjID.text().strip().lower()
+        subjid = self.txtSubjID.currentText().strip().lower()
         afflimb = self.cbAff.currentText().lower()
         mode = self.mode
         if mode == "assessment":
