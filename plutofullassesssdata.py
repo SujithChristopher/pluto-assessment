@@ -583,9 +583,13 @@ class PlutoAssessmentProtocolData(object):
             return
         _dframe = pd.DataFrame(columns=pfadef.FA_SUMMARY_HEADER)
         if self._mode == "screening":
-            # AROM only, every mechanism, no affected-side gate.
-            for _m in pfadef.MECHANISMS:
-                _dframe = self._add_rows(_dframe, _m, "AROM", gated=False)
+            # Screening protocol comes from SCREENING_MECH_TASKS (AROM only).
+            # limb == afflimb in screening, so the affected gate always passes;
+            # gated=False keeps it explicit.
+            for _m, _taskgroups in pfadef.SCREENING_MECH_TASKS.items():
+                for _group in _taskgroups:
+                    for _t in _group:
+                        _dframe = self._add_rows(_dframe, _m, _t, gated=False)
         else:
             for _m in pfadef.MECHANISMS:
                 for _t in pfadef.MECH_TASKS[_m][0]:

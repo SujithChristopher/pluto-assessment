@@ -61,4 +61,13 @@ assert set(sdf["mechanism"]) == set(pfadef.MECHANISMS), set(sdf["mechanism"])
 info = json.loads((pathlib.Path(s.basedir) / "subject_info.json").read_text())
 assert "domlimb" not in info and info["afflimb"] == "right", info
 
+# --- screening details JSON: mode + AROM-only tasks per mechanism ---
+sdet = pathlib.Path(s.detailedsummary.filename)
+assert sdet.name == "s002_right_screening_details.json", sdet.name
+sdetval = json.loads(sdet.read_text())
+assert sdetval["mode"] == "screening", sdetval.get("mode")
+assert "type" not in sdetval, sdetval.keys()
+for _m in pfadef.MECHANISMS:
+    assert list(sdetval[_m]["tasks"].keys()) == ["AROM"], (_m, sdetval[_m]["tasks"].keys())
+
 print("OK")
