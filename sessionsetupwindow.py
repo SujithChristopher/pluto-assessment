@@ -278,6 +278,23 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
         }
         self.close()
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Center on screen the first time the window is shown (geometry is only
+        # final once the layout has been applied at show time).
+        if not getattr(self, "_centered", False):
+            self._center_on_screen()
+            self._centered = True
+
+    def _center_on_screen(self):
+        self.adjustSize()
+        parent = self.parentWidget()
+        screen = (parent.screen() if parent is not None else None) \
+            or QtWidgets.QApplication.primaryScreen()
+        geo = self.frameGeometry()
+        geo.moveCenter(screen.availableGeometry().center())
+        self.move(geo.topLeft())
+
     def closeEvent(self, event):
         if self.on_close_callback:
             self.on_close_callback(data=self.result)
