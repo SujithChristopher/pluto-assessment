@@ -17,26 +17,62 @@ from PySide6.QtGui import QColor
 from PySide6.QtCore import QStandardPaths
 
 
-def homer_data_root() -> pathlib.Path:
-    """Base folder for all HOMER-PLUTO data: <Documents>/homerpluto.
-
-    Stored under the user's Documents so the packaged Windows app always writes
-    to a stable, user-writable location regardless of where the .exe is launched
-    from. QStandardPaths resolves the real Documents folder (incl. OneDrive
-    redirection); fall back to ~/Documents if it is unavailable."""
+def _documents_dir() -> pathlib.Path:
+    """User's Documents folder (OneDrive-safe via QStandardPaths)."""
     _docs = QStandardPaths.writableLocation(
         QStandardPaths.StandardLocation.DocumentsLocation
     )
     if not _docs:
         _docs = str(pathlib.Path.home() / "Documents")
-    return pathlib.Path(_docs) / "homerpluto"
+    return pathlib.Path(_docs)
+
+
+# Fixed home for the app config; the data tree may be relocated via config.json.
+CONFIG_FILE = _documents_dir() / "homerpluto" / "config.json"
+
+# Default config used to bootstrap config.json on first run.
+DEFAULT_CONFIG = {
+    "data_dir": str(_documents_dir() / "homerpluto"),
+    "com_port": "COM4",
+}
+
+
+def load_config() -> dict:
+    """Load app config from <Documents>/homerpluto/config.json.
+
+    Creates the file with DEFAULT_CONFIG if it is missing, and back-fills any
+    missing keys so older config files keep working. Returns the merged dict."""
+    cfg = dict(DEFAULT_CONFIG)
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            cfg.update(json.load(f))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        pass
+    # Write back so the file exists and carries any newly added default keys.
+    try:
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(cfg, f, indent=2)
+    except OSError:
+        pass
+    return cfg
+
+
+_CONFIG = load_config()
+
+
+def homer_data_root() -> pathlib.Path:
+    """Parent folder for all HOMER-PLUTO data.
+
+    Defaults to <Documents>/homerpluto but can be relocated via the "data_dir"
+    key in config.json, so the data tree is configurable without code edits."""
+    return pathlib.Path(_CONFIG.get("data_dir", DEFAULT_CONFIG["data_dir"]))
 
 
 #
-# PLUTO COM Port
+# PLUTO COM Port (configurable via "com_port" in config.json; default COM4)
 #
-PLUTOCOMM = "COM5" # Sujith system
-# PLUTOCOMM = "COM8"
+PLUTOCOMM = _CONFIG.get("com_port", DEFAULT_CONFIG["com_port"])
 
 
 class ROMType(Enum):

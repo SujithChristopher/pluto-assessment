@@ -52,7 +52,14 @@
       "Bash(git commit -q -m 'chore: remove old subject create/select windows *)",
       "Bash(git commit -q -m 'fix\\(main\\): detach nested layouts before discarding in _group_left_column *)",
       "Bash(rm -f docs/_setup_assessment.png docs/_setup_screening.png)",
-      "Bash(git commit -q -m 'style\\(ui\\): clinical theme + card-based Session Setup window *)"
+      "Bash(git commit -q -m 'style\\(ui\\): clinical theme + card-based Session Setup window *)",
+      "Bash(rm -f docs/_setup_picker.png)",
+      "Bash(git commit -q -m 'feat\\(ui\\): subject id is editable combobox with autocomplete *)",
+      "Bash(rm -f docs/_t_window.png docs/_t_popup.png)",
+      "Bash(git commit -q -m 'fix\\(ui\\): Fusion style + palette so comboboxes/native controls render *)",
+      "Bash(git commit -q -m 'fix\\(ui\\): center Session Setup window on screen when shown *)",
+      "Bash(rm -f docs/_t_radios.png)",
+      "Bash(git commit -q -m 'fix\\(ui\\): space out mode radios and stop Screening label clipping *)"
     ]
   }
 }

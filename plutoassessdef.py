@@ -9,18 +9,7 @@ Email: siva82kb@gmail.com
 import numpy as np
 import pathlib
 from enum import Enum
-from PySide6.QtCore import QStandardPaths
-
-
-def _homer_data_root() -> pathlib.Path:
-    """Base folder for all HOMER-PLUTO data: <Documents>/homerpluto (Windows;
-    OneDrive-safe via QStandardPaths, falling back to ~/Documents)."""
-    _docs = QStandardPaths.writableLocation(
-        QStandardPaths.StandardLocation.DocumentsLocation
-    )
-    if not _docs:
-        _docs = str(pathlib.Path.home() / "Documents")
-    return pathlib.Path(_docs) / "homerpluto"
+from plutofullassessdef import homer_data_root as _homer_data_root
 
 
 # Module level constants.
