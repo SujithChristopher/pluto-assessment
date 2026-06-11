@@ -14,6 +14,10 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QGraphicsPathItem,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QAbstractItemView,
 )
 from PySide6.QtGui import QPainterPath, QBrush, QColor, QFont
 from PySide6.QtCore import QPointF
@@ -232,6 +236,76 @@ class MechTaskSkipDialog(QDialog):
     def reject(self):
         self.text_edit.setStyleSheet("")
         super().reject()
+
+
+class ScreeningStatsDialog(QDialog):
+    """Popup listing each mechanism's recorded screening AROM, its threshold and
+    pass/fail, plus the overall eligibility verdict. `stats` is the dict returned
+    by PlutoAssessmentProtocolData.get_screening_eligibility()."""
+
+    def __init__(self, eligible, stats, mech_labels=None, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.CustomizeWindowHint)
+        self.setWindowTitle("Screening AROM Stats")
+        mech_labels = mech_labels or {}
+
+        font = QtGui.QFont()
+        font.setFamily("Cascadia Mono Light")
+        font.setPointSize(9)
+        self.setFont(font)
+
+        # Verdict banner.
+        self._verdict = QLabel(
+            "ELIGIBLE" if eligible else "NOT ELIGIBLE", self
+        )
+        self._verdict.setAlignment(QtCore.Qt.AlignCenter)
+        self._verdict.setStyleSheet(
+            "color: rgb(0,120,0); font-weight: bold;"
+            if eligible
+            else "color: rgb(170,0,0); font-weight: bold;"
+        )
+
+        # Per-mechanism table.
+        self._table = QTableWidget(len(stats), 4, self)
+        self._table.setHorizontalHeaderLabels(
+            ["Mechanism", "AROM", "Threshold", "Result"]
+        )
+        self._table.verticalHeader().setVisible(False)
+        self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self._table.setSelectionMode(QAbstractItemView.NoSelection)
+        for _row, (_mech, _s) in enumerate(stats.items()):
+            _unit = _s["unit"]
+            if not _s["done"]:
+                _aromtxt, _restxt, _color = "—", "pending", QColor(120, 120, 120)
+            else:
+                _aromtxt = f"{_s['value']:.1f} {_unit}"
+                _restxt = "PASS" if _s["pass"] else "FAIL"
+                _color = QColor(0, 120, 0) if _s["pass"] else QColor(170, 0, 0)
+            _cells = [
+                mech_labels.get(_mech, _mech),
+                _aromtxt,
+                f"{_s['threshold']:.1f} {_unit}",
+                _restxt,
+            ]
+            for _col, _txt in enumerate(_cells):
+                _item = QTableWidgetItem(_txt)
+                if _col == 3:
+                    _item.setForeground(QBrush(_color))
+                self._table.setItem(_row, _col, _item)
+        self._table.resizeColumnsToContents()
+        self._table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.Stretch
+        )
+
+        self._buttons = QDialogButtonBox(QDialogButtonBox.Close, self)
+        self._buttons.rejected.connect(self.reject)
+        self._buttons.accepted.connect(self.accept)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self._verdict)
+        layout.addWidget(self._table)
+        layout.addWidget(self._buttons)
+        self.resize(420, 220)
 
 
 def create_sector(

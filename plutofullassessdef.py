@@ -175,6 +175,12 @@ MECH_TASKS = {
 # Screening protocol: AROM only, every mechanism.
 SCREENING_MECH_TASKS = {_m: [["AROM"]] for _m in MECHANISMS}
 
+# Screening eligibility: minimum AROM each mechanism must reach for the subject
+# to be included in the study. Joint mechanisms are in degrees; HOC is the hand
+# aperture in cm. A subject is eligible if ANY mechanism meets its threshold.
+SCREENING_AROM_THRESHOLDS = {"FPS": 10.0, "WFE": 10.0, "WURD": 10.0, "HOC": 2.0}
+SCREENING_AROM_UNITS = {"FPS": "deg", "WFE": "deg", "WURD": "deg", "HOC": "cm"}
+
 TASK_DEPENDENCIES = {
     "AROM": {"in_unaffected": False, "depends_on": []},
     "PROM": {"in_unaffected": False, "depends_on": []},

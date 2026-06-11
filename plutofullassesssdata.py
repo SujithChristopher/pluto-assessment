@@ -754,6 +754,47 @@ class PlutoAssessmentDetailsData(object):
             return _rom
         return None
 
+    def get_arom_for_mech(self, mech):
+        """Return the recorded AROM [min, max] for any mechanism if its AROM was
+        completed, else None. Unlike get_arom_if_completed this does not depend
+        on the currently-selected mechanism — used for the screening eligibility
+        readout across all mechanisms."""
+        try:
+            _entry = self._val[mech]["tasks"]["AROM"][-1]
+        except (KeyError, IndexError):
+            return None
+        if _entry.get("status") != pfadef.AssessStatus.COMPLETE.value:
+            return None
+        _rom = _entry.get("rom")
+        if isinstance(_rom, (list, tuple)) and len(_rom) == 2:
+            return _rom
+        return None
+
+    def get_screening_eligibility(self):
+        """Compute screening eligibility from recorded AROM. A subject is
+        eligible if ANY mechanism's AROM range meets its threshold (joints in
+        deg, HOC in cm). Returns (eligible, stats) where stats maps each
+        mechanism to {value, threshold, unit, pass, done}; mechanisms whose AROM
+        is not yet completed have value=None and done=False."""
+        _stats = {}
+        _eligible = False
+        for _m in pfadef.MECHANISMS:
+            _thresh = pfadef.SCREENING_AROM_THRESHOLDS[_m]
+            _rom = self.get_arom_for_mech(_m)
+            _done = _rom is not None
+            _val = abs(_rom[1] - _rom[0]) if _done else None
+            _passed = _done and _val >= _thresh
+            if _passed:
+                _eligible = True
+            _stats[_m] = {
+                "value": _val,
+                "threshold": _thresh,
+                "unit": pfadef.SCREENING_AROM_UNITS[_m],
+                "pass": _passed,
+                "done": _done,
+            }
+        return _eligible, _stats
+
     def get_prom(self):
         """Get the PROM data for the current mechanism."""
         if self._mech is None:

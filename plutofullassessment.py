@@ -36,7 +36,7 @@ from plutoapromwindow import PlutoAPRomAssessWindow
 from plutoromwindow import PlutoRomAssessWindow
 from plutopropassesswindow import PlutoPropAssessWindow
 from plutoforcecontrolwindow import PlutoForceControlWindow
-from myqt import MechStartDialog, MechTaskSkipDialog
+from myqt import MechStartDialog, MechTaskSkipDialog, ScreeningStatsDialog
 from uipy.ui_plutofullassessment import Ui_PlutoFullAssessor
 
 import plutodefs as pdef
@@ -1243,6 +1243,15 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             self.tableProtocolProgress.verticalHeader().setDefaultSectionSize(20)
             self._updatetable = False
 
+        # Screening eligibility banner (screening mode only). Updates live as
+        # each mechanism's AROM is recorded.
+        if hasattr(self, "lblEligibility"):
+            _screening = self.data is not None and self.data.is_screening
+            self.lblEligibility.setVisible(_screening)
+            self.pbViewStats.setVisible(_screening)
+            if _screening and self.data.detailedsummary is not None:
+                self._update_eligibility_label()
+
         # Mechanisms selection
         _mechflag = self._maindisable is False and (
             self._smachine.state == States.MECH_SELECT
@@ -1281,6 +1290,41 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self.lblSessionInfo.setText(self._get_session_info())
 
     #
+    # Screening eligibility
+    #
+    def _update_eligibility_label(self):
+        """Refresh the eligibility label from recorded screening AROM values.
+        Eligible if ANY mechanism meets its threshold; shows a partial verdict
+        until all mechanisms are assessed."""
+        _eligible, _stats = self.data.detailedsummary.get_screening_eligibility()
+        _ndone = sum(1 for _s in _stats.values() if _s["done"])
+        _ntot = len(_stats)
+        if _ndone == 0:
+            self.lblEligibility.setText("Eligibility: pending")
+            self.lblEligibility.setStyleSheet(
+                "color: rgb(120,120,120); font-weight: bold;"
+            )
+            return
+        _verdict = "ELIGIBLE" if _eligible else "NOT ELIGIBLE"
+        _suffix = "" if _ndone == _ntot else f" (partial {_ndone}/{_ntot})"
+        self.lblEligibility.setText(f"{_verdict}{_suffix}")
+        self.lblEligibility.setStyleSheet(
+            "color: rgb(0,120,0); font-weight: bold;"
+            if _eligible
+            else "color: rgb(170,0,0); font-weight: bold;"
+        )
+
+    def _show_screening_stats(self):
+        """Popup the per-mechanism screening AROM stats dialog."""
+        if self.data is None or self.data.detailedsummary is None:
+            return
+        _eligible, _stats = self.data.detailedsummary.get_screening_eligibility()
+        _dlg = ScreeningStatsDialog(
+            _eligible, _stats, mech_labels=pfadef.MECH_LABELS, parent=self
+        )
+        _dlg.exec()
+
+    #
     # Supporting functions
     #
     def _get_subject_details(self):
@@ -1302,6 +1346,20 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self.pbWURDSkip.setFont(font)
         self.pbFPSSkip.setFont(font)
         self.pbHOCSkip.setFont(font)
+
+        # Screening eligibility banner: an "Eligible/Not Eligible" label and a
+        # "View Stats" button inserted above the protocol-progress table. Both
+        # are shown only in screening mode (toggled in update_ui).
+        self.lblEligibility = QtWidgets.QLabel("")
+        self.pbViewStats = QtWidgets.QPushButton("View Stats")
+        _elrow = QtWidgets.QHBoxLayout()
+        _elrow.addWidget(self.lblEligibility)
+        _elrow.addStretch(1)
+        _elrow.addWidget(self.pbViewStats)
+        self.verticalLayout_5.insertLayout(0, _elrow)
+        self.pbViewStats.clicked.connect(self._show_screening_stats)
+        self.lblEligibility.setVisible(False)
+        self.pbViewStats.setVisible(False)
 
     def _move_into(self, src_layout, dst_layout, item):
         """Move a widget or nested layout from src_layout to dst_layout."""
