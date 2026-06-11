@@ -605,7 +605,9 @@ class PlutoAssessmentProtocolData(object):
             taskname=taskname, limb=self._limb, afflimb=self._afflimb
         ):
             return dframe
-        _n = pfadef.get_task_constants(taskname).NO_OF_TRIALS
+        # Screening is a quick single-trial sweep (AROM only); assessment runs
+        # the full per-task trial count.
+        _n = 1 if self._mode == "screening" else pfadef.get_task_constants(taskname).NO_OF_TRIALS
         return pd.concat(
             [
                 dframe,
