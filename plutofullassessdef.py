@@ -28,17 +28,17 @@ def _documents_dir() -> pathlib.Path:
 
 
 # Fixed home for the app config; the data tree may be relocated via config.json.
-CONFIG_FILE = _documents_dir() / "homerpluto" / "config.json"
+CONFIG_FILE = _documents_dir() / "HomerPlutoData" / "config.json"
 
 # Default config used to bootstrap config.json on first run.
 DEFAULT_CONFIG = {
-    "data_dir": str(_documents_dir() / "homerpluto"),
+    "data_dir": str(_documents_dir() / "HomerPlutoData"),
     "com_port": "COM4",
 }
 
 
 def load_config() -> dict:
-    """Load app config from <Documents>/homerpluto/config.json.
+    """Load app config from <Documents>/HomerPlutoData/config.json.
 
     Creates the file with DEFAULT_CONFIG if it is missing, and back-fills any
     missing keys so older config files keep working. Returns the merged dict."""
@@ -64,7 +64,7 @@ _CONFIG = load_config()
 def homer_data_root() -> pathlib.Path:
     """Parent folder for all HOMER-PLUTO data.
 
-    Defaults to <Documents>/homerpluto but can be relocated via the "data_dir"
+    Defaults to <Documents>/HomerPlutoData but can be relocated via the "data_dir"
     key in config.json, so the data tree is configurable without code edits."""
     return pathlib.Path(_CONFIG.get("data_dir", DEFAULT_CONFIG["data_dir"]))
 
