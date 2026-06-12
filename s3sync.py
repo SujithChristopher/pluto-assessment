@@ -25,6 +25,7 @@ Author: HOMER-PLUTO
 import json
 import os
 import pathlib
+import sys
 import threading
 import time
 
@@ -42,15 +43,37 @@ _SKIP_SUFFIXES = (".tmp", ".lock")
 _WRITE_GRACE_SEC = 2.0
 
 
+def _env_search_paths() -> list[pathlib.Path]:
+    """Where to look for ``.env``, in priority order.
+
+    Frozen (PyInstaller) build: beside the .exe first, so the operator can edit
+    credentials without rebuilding and the secret is never baked into the
+    binary. Then the source dir (dev runs). ``_MEIPASS`` is included last only
+    as a fallback in case someone does bundle it.
+    """
+    paths = []
+    if getattr(sys, "frozen", False):
+        paths.append(pathlib.Path(sys.executable).parent / ".env")
+    paths.append(pathlib.Path(__file__).parent / ".env")
+    if hasattr(sys, "_MEIPASS"):
+        paths.append(pathlib.Path(sys._MEIPASS) / ".env")
+    return paths
+
+
 def load_s3_config(env_path: pathlib.Path | None = None) -> dict:
-    """Parse the repo-root ``.env`` into an S3 config dict.
+    """Parse the ``.env`` into an S3 config dict.
 
     No external dependency (python-dotenv) — a plain ``KEY=VALUE`` parse is
     enough. Returns keys: bucket, prefix, access_key, secret_key, region.
-    ``prefix`` defaults to ``case_study_cmcv`` when unset in .env.
+    ``prefix`` defaults to ``case_study_cmcv`` when unset in .env. When
+    ``env_path`` is not given, searches the locations in
+    :func:`_env_search_paths` and uses the first that exists.
     """
     if env_path is None:
-        env_path = pathlib.Path(__file__).parent / ".env"
+        env_path = next(
+            (_p for _p in _env_search_paths() if _p.exists()),
+            _env_search_paths()[-1],
+        )
     values: dict[str, str] = {}
     if env_path.exists():
         for _line in env_path.read_text(encoding="utf-8").splitlines():
