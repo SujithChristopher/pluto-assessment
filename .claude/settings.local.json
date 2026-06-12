@@ -59,7 +59,9 @@
       "Bash(git commit -q -m 'fix\\(ui\\): Fusion style + palette so comboboxes/native controls render *)",
       "Bash(git commit -q -m 'fix\\(ui\\): center Session Setup window on screen when shown *)",
       "Bash(rm -f docs/_t_radios.png)",
-      "Bash(git commit -q -m 'fix\\(ui\\): space out mode radios and stop Screening label clipping *)"
+      "Bash(git commit -q -m 'fix\\(ui\\): space out mode radios and stop Screening label clipping *)",
+      "Bash(uv add *)",
+      "Bash(git check-ignore *)"
     ]
   }
 }

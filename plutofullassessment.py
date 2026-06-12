@@ -10,6 +10,7 @@ import itertools
 import random
 import sys
 import re
+import time
 import pathlib
 import json
 import numpy as np
@@ -51,6 +52,7 @@ from plutodiscreachwindow import PlutoDiscReachAssessWindow
 from plutopropassesswindow import PlutoPropAssessWindow
 from plutofullassesssdata import DataFrameModel
 from async_workers import SessionSetupWorker
+from s3sync import S3SyncWorker, load_s3_config
 
 
 DEBUG = False
@@ -299,6 +301,16 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
 
         # One time set up
         self._one_time_setup()
+
+        # Background S3 sync. Mirrors the whole data tree (fullassessment +
+        # screening) to the bucket; local files stay the source of truth.
+        self._last_sync_kick = 0.0
+        self._s3sync = S3SyncWorker(
+            root=pfadef.homer_data_root(),
+            config=load_s3_config(),
+        )
+        self._s3sync.status.connect(self._on_s3_status)
+        self._s3sync.start()
 
     @property
     def protocol(self):
@@ -1289,6 +1301,9 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         # Update session information.
         self.lblSessionInfo.setText(self._get_session_info())
 
+        # Nudge the background S3 sync (throttled).
+        self._maybe_kick_sync()
+
     #
     # Screening eligibility
     #
@@ -1323,6 +1338,34 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             _eligible, _stats, mech_labels=pfadef.MECH_LABELS, parent=self
         )
         _dlg.exec()
+
+    #
+    # S3 sync indicator
+    #
+    def _on_s3_status(self, state, pending, message):
+        """Update the top-right sync indicator from S3SyncWorker signals."""
+        _map = {
+            "disabled": ("⚪ Sync off", "#9aa0a6"),
+            "offline": ("⚪ Offline ↻", "#9aa0a6"),
+            "syncing": (f"\U0001f535 Syncing… ({pending})", "#2563eb"),
+            "synced": ("\U0001f7e2 Synced", "#0a7d00"),
+            "error": ("\U0001f534 Sync error", "#c62828"),
+        }
+        _text, _color = _map.get(state, ("", "#000000"))
+        self.lblS3Sync.setText(_text)
+        self.lblS3Sync.setStyleSheet(f"color:{_color}; font-weight:600;")
+        self.lblS3Sync.setToolTip(message or "")
+
+    def _maybe_kick_sync(self):
+        """Nudge the sync worker to sweep now (throttled to once per 5s).
+        Called from update_ui so a just-finalised task uploads promptly without
+        walking the tree on every UI refresh."""
+        if getattr(self, "_s3sync", None) is None:
+            return
+        _now = time.monotonic()
+        if _now - self._last_sync_kick >= 5.0:
+            self._last_sync_kick = _now
+            self._s3sync.request_sweep()
 
     #
     # Supporting functions
@@ -1360,6 +1403,13 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self.pbViewStats.clicked.connect(self._show_screening_stats)
         self.lblEligibility.setVisible(False)
         self.pbViewStats.setVisible(False)
+
+        # S3 sync status indicator, top-right above the protocol table.
+        self.lblS3Sync = QtWidgets.QLabel("")
+        _syncrow = QtWidgets.QHBoxLayout()
+        _syncrow.addStretch(1)
+        _syncrow.addWidget(self.lblS3Sync)
+        self.verticalLayout_5.insertLayout(0, _syncrow)
 
     def _move_into(self, src_layout, dst_layout, item):
         """Move a widget or nested layout from src_layout to dst_layout."""
@@ -1579,6 +1629,12 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
     # Main window close event
     #
     def closeEvent(self, event):
+        try:
+            if getattr(self, "_s3sync", None) is not None:
+                self._s3sync.stop()
+                self._s3sync.wait(3000)
+        except Exception as e:
+            print(f"Error stopping S3 sync: {e}")
         try:
             self.pluto.set_control_type("NONE")
             self.pluto.close()
