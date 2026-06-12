@@ -7,7 +7,7 @@ the source of truth; this only ever *uploads* copies, never deletes or moves.
 
 Bucket layout mirrors the local tree:
 
-    s3://<AWS_S3_BUCKET>/<AWS_S3_PREFIX>/<path-relative-to-data-root>
+    s3://<AWS_S3_BUCKET>/<AWS_S3_PREFIX>/HomerPlutoData/<path-under-data-root>
 
 Credentials and the target bucket are read from a ``.env`` file in the repo
 root (see ``load_s3_config``). If credentials are missing the worker reports a
@@ -88,6 +88,9 @@ class S3SyncWorker(QThread):
         self._stopflag = False
         self._client = None
         self._manifest_path = self._root / MANIFEST_NAME
+        # Keys mirror the tree *including* the data-root folder name, so the
+        # bucket layout is <prefix>/HomerPlutoData/<subjid>/...
+        self._relbase = self._root.parent
 
     #
     # Public control (called from the GUI thread)
@@ -159,7 +162,7 @@ class S3SyncWorker(QThread):
                 if _name.endswith(_SKIP_SUFFIXES):
                     continue
                 _abs = pathlib.Path(_dirpath, _name)
-                _rel = _abs.relative_to(self._root).as_posix()
+                _rel = _abs.relative_to(self._relbase).as_posix()
                 yield _abs, _rel
 
     def _sweep_once(self):
