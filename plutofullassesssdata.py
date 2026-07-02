@@ -736,7 +736,7 @@ class PlutoAssessmentDetailsData(object):
             return pdef.get_range_for_mechanism(self._mech)
 
     def get_arom_if_completed(self):
-        """Return the AROM ROM (best-of-3 averaged) only if AROM was actually
+        """Return the AROM ROM (best cycle) only if AROM was actually
         completed for the current mechanism. Returns None if AROM was skipped,
         terminated, rejected, or never recorded — so callers (e.g. PROM) can
         omit AROM-derived boundaries when the subject did not qualify."""

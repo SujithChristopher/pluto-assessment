@@ -301,7 +301,7 @@ class BaseConstants:
 # Active Range of Motion Constants
 #
 class AROM(BaseConstants):
-    NO_OF_TRIALS = 3  # Number of trials.
+    NO_OF_TRIALS = 1  # Number of trials.
     NO_OF_CYCLES = 5  # Full oscillation cycles required (non-HOC AROM only).
     TRIAL_TIME_LIMIT = 60.0  # sec — wall-clock window to complete one trial.
     MAX_FAILED_TRIALS = 2  # failed trials that terminate AROM (disables DISC).
