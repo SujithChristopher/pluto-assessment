@@ -298,6 +298,23 @@ class PlutoAssistPRomAssessmentStateMachine:
         return self._state
 
     @property
+    def _torqsign(self):
+        """Limb-aware torque direction multiplier.
+
+        The device applies torque as a fixed motor-frame value (TORQUE_DIR1 =
+        +1, TORQUE_DIR2 = -1) and neither the firmware calibration nor the app
+        flips it per limb. The LEFT and RIGHT mounts are physically mirrored,
+        so a fixed +1 Nm that assists the intended direction on the LEFT
+        drives the RIGHT limb the opposite way (into its end-stop -> "not
+        activating"). LEFT is the correct reference, so RIGHT is inverted to
+        match its anatomical direction. HOC is excluded: its direction is
+        already handled by the position mirror (MAXHOC - pos), so its torque
+        sign stays as-is.
+        """
+        _is_right = str(self._data.limb).strip().lower() == "right"
+        return -1.0 if (_is_right and self._data.mechanism != "HOC") else 1.0
+
+    @property
     def in_a_trial_state(self):
         return self._state in [
             States.WAIT_TO_MOVE,
@@ -396,7 +413,11 @@ class PlutoAssistPRomAssessmentStateMachine:
         if self._statetimer < 0 and event == pdef.PlutoEvents.RELEASED:
             self._state = States.TORQ_DIR2
             self._statetimer = 0.5
-            return Actions.TORQ_TGT_DIR2
+            # Hold torque at zero here (do NOT step to full TORQUE_DIR2). The
+            # MOVING_DIR2 ramp starts from 0, so pre-setting full torque only
+            # caused a step -> 0.5s hold -> drop -> re-ramp jerk. Direction 1
+            # enters via TORQ_CTRL (target 0) then ramps; this mirrors it.
+            return Actions.TORQ_TGT_ZERO
         return Actions.DO_NOTHING
 
     def _handle_torq_dir2(self, event, dt) -> Actions:
@@ -491,18 +512,16 @@ class PlutoAssistPRomAssessmentStateMachine:
         self._pluto.set_control_type("TORQUE")
 
     def _act_torq_tgt_dir1(self):
-        if self._tgt_set(pfadef.APROM.TORQUE_DIR1):
+        _tgt = self._torqsign * pfadef.APROM.TORQUE_DIR1
+        if self._tgt_set(_tgt):
             return
-        self._pluto.set_control_target(
-            target=pfadef.APROM.TORQUE_DIR1
-        )
+        self._pluto.set_control_target(target=_tgt)
 
     def _act_torq_tgt_dir2(self):
-        if self._tgt_set(pfadef.APROM.TORQUE_DIR2):
+        _tgt = self._torqsign * pfadef.APROM.TORQUE_DIR2
+        if self._tgt_set(_tgt):
             return
-        self._pluto.set_control_target(
-            target=pfadef.APROM.TORQUE_DIR2
-        )
+        self._pluto.set_control_target(target=_tgt)
 
     def _act_torq_tgt_zero(self):
         self._last_sent_target = None
@@ -519,7 +538,7 @@ class PlutoAssistPRomAssessmentStateMachine:
             self._pluto.set_control_type("TORQUE")
         _elapsed = self._data.duration - self._statetimer
         _frac = min(1.0, max(0.0, _elapsed / pfadef.APROM.RAMP_DURATION))
-        _tgt = self._ramp_dir * _frac
+        _tgt = self._torqsign * self._ramp_dir * _frac
         if (
             self._last_sent_target is None
             or abs(_tgt - self._last_sent_target) >= 0.02

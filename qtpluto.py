@@ -196,17 +196,17 @@ class QtPluto(QObject):
 
     @property
     def packetnumber(self):
-        return self.currstatedata[4] if len(self.currstatedata) > 0 else None
+        return self.currstatedata[4] if len(self.currstatedata) > 4 else None
 
     @property
     def controlbound(self):
         return (
-            (1.0 * self.currstatedata[6] / 255) if len(self.currstatedata) > 0 else None
+            (1.0 * self.currstatedata[6] / 255) if len(self.currstatedata) > 6 else None
         )
 
     @property
     def controldir(self):
-        return self.currstatedata[7] if len(self.currstatedata) > 0 else None
+        return self.currstatedata[7] if len(self.currstatedata) > 7 else None
 
     @property
     def controlgain(self):
@@ -214,13 +214,13 @@ class QtPluto(QObject):
             (pdef.PlutoMaxControlGain - pdef.PlutoMinControlGain)
             * (self.currstatedata[8] / 255.0)
             + pdef.PlutoMinControlGain
-            if len(self.currstatedata) > 0
+            if len(self.currstatedata) > 8
             else None
         )
 
     @property
     def controlhold(self):
-        return self.currstatedata[9] if len(self.currstatedata) > 0 else None
+        return self.currstatedata[9] if len(self.currstatedata) > 9 else None
 
     @property
     def objectDelPosition(self):
@@ -234,7 +234,7 @@ class QtPluto(QObject):
 
     @property
     def button(self):
-        return self.currstatedata[9] if len(self.currstatedata) > 0 else None
+        return self.currstatedata[9] if len(self.currstatedata) > 9 else None
 
     def delt(self):
         return self._deltimes[-1] if len(self._deltimes) > 0 else 0
