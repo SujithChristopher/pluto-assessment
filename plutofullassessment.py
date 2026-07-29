@@ -1266,11 +1266,13 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             self._updatetable = False
 
         # Screening eligibility banner (screening mode only). Updates live as
-        # each mechanism's AROM is recorded.
+        # each mechanism's AROM is recorded. The stats button is shown in both
+        # modes once a session exists — assessment gets the values without a
+        # verdict.
         if hasattr(self, "lblEligibility"):
             _screening = self.data is not None and self.data.is_screening
             self.lblEligibility.setVisible(_screening)
-            self.pbViewStats.setVisible(_screening)
+            self.pbViewStats.setVisible(self.protocol is not None)
             if _screening and self.data.detailedsummary is not None:
                 self._update_eligibility_label()
 
@@ -1339,13 +1341,18 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
             else "color: rgb(170,0,0); font-weight: bold;"
         )
 
-    def _show_screening_stats(self):
-        """Popup the per-mechanism screening AROM stats dialog."""
+    def _show_arom_stats(self):
+        """Popup the per-mechanism AROM stats dialog. Screening also gets the
+        eligibility verdict and pass/fail column; assessment shows the recorded
+        values only."""
         if self.data is None or self.data.detailedsummary is None:
             return
         _eligible, _stats = self.data.detailedsummary.get_screening_eligibility()
         _dlg = ScreeningStatsDialog(
-            _eligible, _stats, mech_labels=pfadef.MECH_LABELS, parent=self
+            _eligible if self.data.is_screening else None,
+            _stats,
+            mech_labels=pfadef.MECH_LABELS,
+            parent=self,
         )
         _dlg.exec()
 
@@ -1400,9 +1407,9 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         self.pbFPSSkip.setFont(font)
         self.pbHOCSkip.setFont(font)
 
-        # Screening eligibility banner: an "Eligible/Not Eligible" label and a
-        # "View Stats" button inserted above the protocol-progress table. Both
-        # are shown only in screening mode (toggled in update_ui).
+        # An "Eligible/Not Eligible" label (screening only) and a "View Stats"
+        # button (both modes) inserted above the protocol-progress table.
+        # Visibility is toggled in update_ui.
         self.lblEligibility = QtWidgets.QLabel("")
         self.pbViewStats = QtWidgets.QPushButton("View Stats")
         _elrow = QtWidgets.QHBoxLayout()
@@ -1410,7 +1417,7 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         _elrow.addStretch(1)
         _elrow.addWidget(self.pbViewStats)
         self.verticalLayout_5.insertLayout(0, _elrow)
-        self.pbViewStats.clicked.connect(self._show_screening_stats)
+        self.pbViewStats.clicked.connect(self._show_arom_stats)
         self.lblEligibility.setVisible(False)
         self.pbViewStats.setVisible(False)
 

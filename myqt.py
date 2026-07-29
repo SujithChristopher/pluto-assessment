@@ -239,14 +239,19 @@ class MechTaskSkipDialog(QDialog):
 
 
 class ScreeningStatsDialog(QDialog):
-    """Popup listing each mechanism's recorded screening AROM, its threshold and
-    pass/fail, plus the overall eligibility verdict. `stats` is the dict returned
-    by PlutoAssessmentProtocolData.get_screening_eligibility()."""
+    """Popup listing each mechanism's recorded AROM and its threshold. `stats` is
+    the dict returned by PlutoAssessmentProtocolData.get_screening_eligibility().
+
+    Screening passes the eligibility verdict as `eligible`, which adds the
+    verdict banner and the pass/fail Result column. Assessment passes
+    `eligible=None` — no verdict is computed there, so the dialog is a plain
+    read-out of the recorded values."""
 
     def __init__(self, eligible, stats, mech_labels=None, parent=None):
         super().__init__(parent)
         self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.CustomizeWindowHint)
-        self.setWindowTitle("Screening AROM Stats")
+        _judged = eligible is not None
+        self.setWindowTitle("Screening AROM Stats" if _judged else "AROM Stats")
         mech_labels = mech_labels or {}
 
         font = QtGui.QFont()
@@ -254,22 +259,21 @@ class ScreeningStatsDialog(QDialog):
         font.setPointSize(9)
         self.setFont(font)
 
-        # Verdict banner.
-        self._verdict = QLabel(
-            "ELIGIBLE" if eligible else "NOT ELIGIBLE", self
-        )
-        self._verdict.setAlignment(QtCore.Qt.AlignCenter)
-        self._verdict.setStyleSheet(
-            "color: rgb(0,120,0); font-weight: bold;"
-            if eligible
-            else "color: rgb(170,0,0); font-weight: bold;"
-        )
+        # Verdict banner (screening only).
+        self._verdict = None
+        if _judged:
+            self._verdict = QLabel("ELIGIBLE" if eligible else "NOT ELIGIBLE", self)
+            self._verdict.setAlignment(QtCore.Qt.AlignCenter)
+            self._verdict.setStyleSheet(
+                "color: rgb(0,120,0); font-weight: bold;"
+                if eligible
+                else "color: rgb(170,0,0); font-weight: bold;"
+            )
 
         # Per-mechanism table.
-        self._table = QTableWidget(len(stats), 4, self)
-        self._table.setHorizontalHeaderLabels(
-            ["Mechanism", "AROM", "Threshold", "Result"]
-        )
+        _headers = ["Mechanism", "AROM", "Threshold"] + (["Result"] if _judged else [])
+        self._table = QTableWidget(len(stats), len(_headers), self)
+        self._table.setHorizontalHeaderLabels(_headers)
         self._table.verticalHeader().setVisible(False)
         self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._table.setSelectionMode(QAbstractItemView.NoSelection)
@@ -285,11 +289,10 @@ class ScreeningStatsDialog(QDialog):
                 mech_labels.get(_mech, _mech),
                 _aromtxt,
                 f"{_s['threshold']:.1f} {_unit}",
-                _restxt,
-            ]
+            ] + ([_restxt] if _judged else [])
             for _col, _txt in enumerate(_cells):
                 _item = QTableWidgetItem(_txt)
-                if _col == 3:
+                if _judged and _col == 3:
                     _item.setForeground(QBrush(_color))
                 self._table.setItem(_row, _col, _item)
         self._table.resizeColumnsToContents()
@@ -302,7 +305,8 @@ class ScreeningStatsDialog(QDialog):
         self._buttons.accepted.connect(self.accept)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(self._verdict)
+        if self._verdict is not None:
+            layout.addWidget(self._verdict)
         layout.addWidget(self._table)
         layout.addWidget(self._buttons)
         self.resize(420, 220)
