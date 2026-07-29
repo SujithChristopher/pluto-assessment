@@ -172,6 +172,11 @@ MECH_TASKS = {
     ],
 }
 
+# Tasks whose controls are dropped from the main window's Tasks group. These are
+# not part of any MECH_TASKS protocol, so their buttons would only take up space.
+# Clear this list to bring the controls back.
+HIDDEN_TASKS = ["FCTRLLOW", "FCTRLMED", "FCTRLHIGH"]
+
 # Screening protocol: AROM only, every mechanism.
 SCREENING_MECH_TASKS = {_m: [["AROM"]] for _m in MECHANISMS}
 

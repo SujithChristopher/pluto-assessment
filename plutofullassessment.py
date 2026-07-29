@@ -1468,23 +1468,33 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
                 _holder.setLayout(_old)
                 self._discarded_widgets.append(_holder)
 
-        # Tasks: calibrate + all per-task rows.
+        # Tasks: calibrate + all per-task rows. Rows for tasks listed in
+        # pfadef.HIDDEN_TASKS are discarded instead of moved, so the group keeps
+        # the vertical space. Their buttons survive inside the holder widget, so
+        # the callback wiring and _update_task_controls stay valid.
         self.gbTasks = QtWidgets.QGroupBox("Tasks")
         tv = QtWidgets.QVBoxLayout(self.gbTasks)
         tv.setSpacing(3)
-        for _item in (
-            self.pbCalibrate,
-            self.horizontalLayout,       # AROM
-            self.horizontalLayout_6,     # PROM
-            self.horizontalLayout_7,     # APROM (slow)
-            self.horizontalLayout_9,     # Discrete reach
-            self.horizontalLayout_10,    # Position hold
-            self.horizontalLayout_11,    # Proprioception
-            self.horizontalLayout_12,    # Force control low
-            self.horizontalLayout_13,    # Force control med
-            self.horizontalLayout_14,    # Force control high
+        self._move_into(vl, tv, self.pbCalibrate)
+        for _task, _row in (
+            ("AROM", self.horizontalLayout),
+            ("PROM", self.horizontalLayout_6),
+            ("APROM", self.horizontalLayout_7),
+            ("DISC", self.horizontalLayout_9),
+            ("POSHOLD", self.horizontalLayout_10),
+            ("PROP", self.horizontalLayout_11),
+            ("FCTRLLOW", self.horizontalLayout_12),
+            ("FCTRLMED", self.horizontalLayout_13),
+            ("FCTRLHIGH", self.horizontalLayout_14),
         ):
-            self._move_into(vl, tv, _item)
+            if _task in pfadef.HIDDEN_TASKS:
+                vl.removeItem(_row)
+                _holder = QtWidgets.QWidget()
+                _holder.setLayout(_row)
+                _holder.hide()
+                self._discarded_widgets.append(_holder)
+                continue
+            self._move_into(vl, tv, _row)
 
         # Only gbMechanisms remains in vl now. Bracket it with the new groups.
         vl.insertWidget(0, self.gbSession)
