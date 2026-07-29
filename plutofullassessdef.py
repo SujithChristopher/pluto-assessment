@@ -319,8 +319,8 @@ class AROM(BaseConstants):
     MAXHOC = 9.4  # cm — device full-open aperture (HOC far corner).
     SUMMARY_HEADER_CYCLING = [
         "session", "type", "limb", "mechanism",
-        "trial", "last_cycle_left", "last_cycle_right",
-        "last_cycle_range", "rest_position", "cycles_completed",
+        "trial", "best_cycle_left", "best_cycle_right",
+        "best_cycle_range", "rest_position", "cycles_completed",
     ]
 
 
