@@ -304,7 +304,9 @@ class AROM(BaseConstants):
     NO_OF_TRIALS = 1  # Number of trials.
     NO_OF_CYCLES = 5  # Full oscillation cycles required (non-HOC AROM only).
     TRIAL_TIME_LIMIT = 60.0  # sec — wall-clock window to complete one trial.
-    MAX_FAILED_TRIALS = 2  # failed trials that terminate AROM (disables DISC).
+    # Failed trials that terminate AROM (disables DISC). Must be <= NO_OF_TRIALS,
+    # otherwise the threshold is unreachable and DISC is never disabled.
+    MAX_FAILED_TRIALS = 1
     REST_ZONE_HOLD_DURATION = 1.0  # sec to hold inside rest zone to complete trial.
     REST_ZONE_HALF_WIDTH = 5  # deg — half-width of rest zone (total = 10 deg).
     CYCLING_HOLD_SAMPLES = 10  # samples averaged for cycling velocity estimate.

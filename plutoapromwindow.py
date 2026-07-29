@@ -1818,21 +1818,32 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                     "Demo trial time limit reached. Restarting demo.",
                 )
                 return
-            # Real trial — let the assessor redo it or move on.
+            # Real trial — let the assessor redo it or move on. When this
+            # failure hits MAX_FAILED_TRIALS there is no next trial: moving on
+            # terminates AROM and disables discrete reaching. Label the button
+            # for what it actually does.
+            _terminates = (self._failed_trials + 1) >= AROM.MAX_FAILED_TRIALS
             box = QtWidgets.QMessageBox(self)
             box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
             box.setWindowTitle("Trial not completed")
             box.setText(
                 "Trial not completed within the time limit.\n"
-                "Redo this trial, or move on to the next one?"
+                + (
+                    "Redo this trial, or skip AROM?\n"
+                    "Skipping terminates AROM and disables discrete reaching "
+                    "for this mechanism."
+                    if _terminates
+                    else "Redo this trial, or move on to the next one?"
+                )
             )
             _redo = box.addButton(
                 "Redo Trial", QtWidgets.QMessageBox.ButtonRole.ActionRole
             )
             _next = box.addButton(
-                "Next Trial", QtWidgets.QMessageBox.ButtonRole.AcceptRole
+                "Skip AROM" if _terminates else "Next Trial",
+                QtWidgets.QMessageBox.ButtonRole.AcceptRole,
             )
-            box.setDefaultButton(_next)
+            box.setDefaultButton(_redo if _terminates else _next)
             box.exec()
             if box.clickedButton() is _redo:
                 # Repeat the same trial; nothing logged, no failure counted.

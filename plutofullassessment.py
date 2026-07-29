@@ -1035,12 +1035,22 @@ class PlutoFullAssesor(QtWidgets.QMainWindow, Ui_PlutoFullAssessor):
         )
         # Auto-skip DISC if AROM range is below the movement threshold.
         if task_completed and data["done"] and "DISC" in self.data.protocol.task_not_completed:
-            _arom = self.data.detailedsummary.get_arom()
-            _arom_range = abs(_arom[1] - _arom[0])
             _mech = self.data.protocol.mech
             _threshold = 2.0 if _mech == "HOC" else 10.0
             _unit = "cm" if _mech == "HOC" else "deg"
-            if _arom_range < _threshold:
+            # No valid [min, max] recorded (e.g. every trial failed on the time
+            # limit) — treat as not meeting the threshold rather than indexing nan.
+            _arom = self.data.detailedsummary.get_arom_if_completed()
+            if _arom is None:
+                self._smachine.run_statemachine(
+                    Events.DISCREACH_SKIP,
+                    {
+                        "comment": "No valid AROM recorded",
+                        "session": self.data.session,
+                    },
+                )
+            elif abs(_arom[1] - _arom[0]) < _threshold:
+                _arom_range = abs(_arom[1] - _arom[0])
                 self._smachine.run_statemachine(
                     Events.DISCREACH_SKIP,
                     {
