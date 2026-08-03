@@ -624,6 +624,7 @@ class PlutoAssistPRomAssessWindow(QtWidgets.QMainWindow):
         dataviewer=False,
         onclosecb=None,
         heartbeat=False,
+        embedded=False,
     ):
         """
         Constructor for the PlutoAssistPRomAssessWindow class.
@@ -637,10 +638,13 @@ class PlutoAssistPRomAssessWindow(QtWidgets.QMainWindow):
         _rlayout.setContentsMargins(10, 10, 10, 10)
         _rlayout.addWidget(self.ui.verticalLayoutWidget)
 
-        self.showMaximized()
-
-        if modal:
-            self.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+        # Embedded mode: used as a page inside the guided GUI's stacked widget,
+        # so it must not show itself as a maximised top-level modal.
+        self._embedded = embedded
+        if not embedded:
+            self.showMaximized()
+            if modal:
+                self.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
 
         # Set the title of the window.
         self.setWindowTitle(
@@ -1153,6 +1157,21 @@ class PlutoAssistPRomAssessWindow(QtWidgets.QMainWindow):
         # Get comment from the experimenter.
         data = {"romval": self.data.rom, "done": self.data.all_trials_done}
         self.pluto.set_control_type("NONE")
+        if self._embedded:
+            data = {
+                "romval": self.data.rom,
+                "done": self.data.all_trials_done,
+                "status": None,
+                "taskcomment": "",
+            }
+            if self.on_close_callback:
+                self.on_close_callback(data=data)
+            self._detach_pluto_callbacks()
+            try:
+                self._devdatawnd.close()
+            except Exception:
+                pass
+            return super().closeEvent(event)
         if self.data.all_trials_done:
             _comment = CommentDialog(
                 label="Assisted PROM completed. Add optional comment.", optionyesno=True

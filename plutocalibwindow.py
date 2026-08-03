@@ -191,6 +191,7 @@ class PlutoCalibrationWindow(QtWidgets.QMainWindow):
         dataviewer=False,
         onclosecb=None,
         heartbeat=False,
+        embedded=False,
     ):
         """
         Constructor for the PlutoCalibrationWindow class.
@@ -204,7 +205,11 @@ class PlutoCalibrationWindow(QtWidgets.QMainWindow):
         self.setMaximumSize(16777215, 16777215)
         self.resize(500, 150)
 
-        if modal:
+        # Embedded mode: this window is used as a page inside the guided GUI's
+        # stacked widget, so it must not become a top-level modal.
+        self._embedded = embedded
+
+        if modal and not embedded:
             self.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
 
         # PLUTO device

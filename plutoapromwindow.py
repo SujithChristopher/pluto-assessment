@@ -960,6 +960,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         assessinfo: dict = None,
         modal=False,
         onclosecb=None,
+        embedded=False,
     ):
         """
         Constructor for the PlutoAPRomAssessWindow class.
@@ -973,10 +974,13 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         _rlayout.setContentsMargins(10, 10, 10, 10)
         _rlayout.addWidget(self.ui.verticalLayoutWidget)
 
-        self.showMaximized()
-
-        if modal:
-            self.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+        # Embedded mode: used as a page inside the guided GUI's stacked widget,
+        # so it must not show itself as a maximised top-level modal.
+        self._embedded = embedded
+        if not embedded:
+            self.showMaximized()
+            if modal:
+                self.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
 
         # Skip AROM flag
         self._arom_skipped = False
@@ -1877,6 +1881,20 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                     f"within {int(AROM.TRIAL_TIME_LIMIT)}s; AROM terminated, "
                     f"discrete reaching disabled."
                 ),
+            }
+            if self.on_close_callback:
+                self.on_close_callback(data=data)
+            self._detach_pluto_callbacks()
+            return super().closeEvent(event)
+
+        # Embedded: the guided GUI's Accept/Redo footer replaces the comment
+        # dialog, so deliver the payload with the status left for the caller.
+        if self._embedded:
+            data = {
+                "romval": self.data.rom,
+                "done": self.data.all_trials_done,
+                "status": None,
+                "taskcomment": "",
             }
             if self.on_close_callback:
                 self.on_close_callback(data=data)
