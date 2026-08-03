@@ -273,7 +273,23 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
                 "screening" if self.data.is_screening else f"TP: {self.data.timepoint}",
             ))
         )
+        _completed = self._completed_pairs()
+        if _completed:
+            self.seq.resume_from(_completed)
+            self._resumed = True
         self._show_ready()
+
+    def _completed_pairs(self):
+        """(mechanism, task) pairs whose protocol row already has a session —
+        completed, skipped or excluded, all of them finished as far as the flow
+        is concerned."""
+        _df = self.data.protocol.df
+        if _df is None:
+            return []
+        _done = _df[_df["session"].notna()]
+        return list(
+            dict.fromkeys(zip(_done["mechanism"].tolist(), _done["task"].tolist()))
+        )
 
     def _on_setup_error(self, message: str):
         self._setup_worker = None
@@ -303,6 +319,19 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         self.stack.setCurrentWidget(self.pageDone)
         self.lblHeader.setText("Done")
         self.lblCounter.setText("")
+        if self.data.is_screening and self.data.detailedsummary is not None:
+            _eligible, _stats = self.data.detailedsummary.get_screening_eligibility()
+            self.pageDone.lblDetail.setText(
+                "ELIGIBLE" if _eligible else "NOT ELIGIBLE"
+            )
+            self.pageDone.lblDetail.setStyleSheet(
+                "font-size: 20pt; font-weight: 600; color: "
+                + ("rgb(0,120,0);" if _eligible else "rgb(170,0,0);")
+            )
+        else:
+            self.pageDone.lblDetail.setText(
+                f"{self.data.subjid} · {self.data.limb}"
+            )
         self._set_footer_hint("You can close the window.")
         self._kick_sync()
 
