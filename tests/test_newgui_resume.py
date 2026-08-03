@@ -2,37 +2,51 @@
 extraction that `PlutoGuidedAssessor._completed_pairs` performs on a protocol
 CSV, fed into a real `Sequencer.resume_from`.
 
-`_completed_pairs` itself lives on `PlutoGuidedAssessor`, which cannot be
-constructed without a live QtPluto/serial connection, so this test does not
-call it directly. Instead it exercises the exact extraction expression from
-its body (`newgui/shell.py`) against a synthetic pandas DataFrame shaped like
-a protocol CSV, then feeds the resulting pairs into a real `Sequencer` to
-confirm the cursor lands where resume is supposed to leave it. If the
-extraction logic were broken (e.g. it included unfinished rows, or dropped
-finished ones), the resulting Sequencer cursor position would be wrong and
-these assertions would fail.
+`_completed_pairs` only reads `self.data.protocol.df` — it never touches
+`self.pluto` or any other Qt/hardware state — so it can be called directly as
+an unbound method on a minimal duck-typed stub standing in for `self`,
+without constructing a real `PlutoGuidedAssessor` (which would need a live
+QtPluto/serial connection). This test does exactly that: it calls the real
+`newgui.shell.PlutoGuidedAssessor._completed_pairs` against a stub whose
+`.data.protocol.df` is a synthetic pandas DataFrame shaped like a protocol
+CSV, then feeds the resulting pairs into a real `Sequencer` to confirm the
+cursor lands where resume is supposed to leave it. Because the shipped
+method is called directly, a future change to its logic (e.g. keying off
+`status` instead of `session`) is exercised by this test with no copy to
+fall out of sync.
+
+Importing `newgui.shell` pulls in PySide6, qtpluto and qtjedi, but at import
+time this only defines classes — `QtPluto`/`JediComm` only open a serial
+port inside their own `__init__`, which runs when `PlutoGuidedAssessor.
+__init__` constructs one. This test never constructs a `PlutoGuidedAssessor`
+(only calls one unbound method on a stub), so no serial port is ever opened.
 
 Run: uv run python tests/test_newgui_resume.py  ->  prints OK."""
+import os
 import pathlib
 import sys
+import types
 
 # Make the repo root importable when run as `python tests/test_newgui_resume.py`.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
+# newgui.shell imports PySide6; running headless avoids needing a display.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 import pandas as pd
 
 from newgui.sequencer import CALIB, Sequencer, Step
+from newgui.shell import PlutoGuidedAssessor
 
 
 def _completed_pairs_from_df(_df):
-    """Mirrors newgui/shell.py PlutoGuidedAssessor._completed_pairs body
-    verbatim, applied to a plain DataFrame instead of self.data.protocol.df."""
-    if _df is None:
-        return []
-    _done = _df[_df["session"].notna()]
-    return list(
-        dict.fromkeys(zip(_done["mechanism"].tolist(), _done["task"].tolist()))
+    """Calls the real, shipped PlutoGuidedAssessor._completed_pairs against a
+    minimal stub for self, so this test exercises the actual implementation
+    rather than a hand-copied reimplementation of it."""
+    _stub = types.SimpleNamespace(
+        data=types.SimpleNamespace(protocol=types.SimpleNamespace(df=_df))
     )
+    return PlutoGuidedAssessor._completed_pairs(_stub)
 
 
 def _protocol_df(rows):
@@ -106,6 +120,12 @@ def test_entirely_finished_protocol_resumes_past_the_end():
     seq = Sequencer("assessment")
     seq.resume_from(_pairs)
     assert seq.is_done() is True
+
+
+def test_no_protocol_dataframe_yields_no_pairs():
+    """self.data.protocol.df is None before setup builds the protocol CSV;
+    _completed_pairs must not blow up and must resume nothing."""
+    assert _completed_pairs_from_df(None) == []
 
 
 if __name__ == "__main__":
