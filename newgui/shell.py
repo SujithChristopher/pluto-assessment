@@ -15,7 +15,7 @@ from qtpluto import QtPluto
 from s3sync import S3SyncWorker, load_s3_config
 
 from newgui.pages import build_page
-from newgui.sequencer import CALIB, Sequencer, Step
+from newgui.sequencer import CALIB, Sequencer, Step, disc_skip_reason
 from newgui.setup import EmbeddedSetupPage
 
 # WURD has no artwork of its own; it reuses the wrist flexion/extension image,
@@ -413,16 +413,35 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
                 status=status,
             )
 
+    def _skip_step(self, task: str, reason: str):
+        """Record a task as skipped and step the sequencer past it. skip_task
+        also marks dependent tasks EXCLUDED (DISC depends on AROM), matching the
+        old GUI."""
+        _mech = self.data.protocol.mech
+        self.data.protocol.skip_task(task, self.data.session, reason)
+        self.data.detailedsummary.skip_task(task, self.data.session, reason)
+        self.seq.mark_completed(Step(_mech, task))
+
     def _after_accept(self, step):
-        """Advance past the accepted step. Auto-skip rules land here in Task 6."""
+        # After AROM, decide whether discrete reaching is worth running.
+        if step.task == "AROM" and "DISC" in self.data.protocol.task_not_completed:
+            _reason = disc_skip_reason(
+                step.mech, self.data.detailedsummary.get_arom_if_completed()
+            )
+            if _reason is not None:
+                self._skip_step("DISC", _reason)
         self.seq.advance()
         self._show_ready()
 
     def _handle_task_terminated(self, payload):
-        """Placeholder until Task 6; treated as an accepted-and-done step."""
+        """AROM terminated itself after too many timed-out trials. Log the skip
+        (which excludes DISC via the task dependencies) and move on."""
         _step = self.seq.current()
         self._discard_taskpage()
-        self.seq.mark_completed(_step)
+        _reason = payload.get("taskcomment") or "Terminated by trial time limit"
+        self._skip_step(_step.task, _reason)
+        if _step.task == "AROM":
+            self.seq.mark_completed(Step(_step.mech, "DISC"))
         self.seq.advance()
         self._show_ready()
 
