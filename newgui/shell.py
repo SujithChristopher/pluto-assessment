@@ -8,7 +8,6 @@ import time
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-import plutodefs as pdef
 import plutofullassessdef as pfadef
 from async_workers import SessionSetupWorker
 from plutofullassesssdata import PlutoAssessmentData
