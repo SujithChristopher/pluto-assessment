@@ -14,6 +14,7 @@ from plutofullassesssdata import PlutoAssessmentData
 from qtpluto import QtPluto
 from s3sync import S3SyncWorker, load_s3_config
 
+from newgui.pages import build_page
 from newgui.sequencer import CALIB, Sequencer, Step
 from newgui.setup import EmbeddedSetupPage
 
@@ -312,8 +313,51 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         self.lblCounter.setText(f"{_n} / {_total}")
 
     def _start_current_step(self):
-        """Launch the task page for the current step. Wired in Task 4."""
-        self.statusBar().showMessage(f"TODO start {self.seq.current()}")
+        """Build and show the task widget for the current step."""
+        _step = self.seq.current()
+        if _step is None:
+            self._show_done()
+            return
+        # A new mechanism: select it in both data stores before anything else.
+        if _step.mech != self.data.protocol.mech:
+            self.data.protocol.set_mechanism(_step.mech)
+            self.data.detailedsummary.set_mechanism(_step.mech)
+        _cb = self._on_calib_closed if _step.is_calib else self._on_task_closed
+        if not _step.is_calib:
+            # set_task stamps the task time that the raw/summary filenames use,
+            # so it must happen before the page is built.
+            self.data.protocol.set_task(_step.task)
+            self.data.detailedsummary.set_task(_step.task)
+        self._taskpage = build_page(_step, self.pluto, self.data, _cb)
+        self.stack.addWidget(self._taskpage)
+        self.stack.setCurrentWidget(self._taskpage)
+        self._update_header()
+        self._set_footer_hint("")
+
+    def _discard_taskpage(self):
+        """Remove and destroy the current task widget."""
+        if self._taskpage is None:
+            return
+        self.stack.removeWidget(self._taskpage)
+        self._taskpage.deleteLater()
+        self._taskpage = None
+
+    def _on_calib_closed(self, data=None):
+        """Calibration has no review: success advances, failure retries."""
+        _done = bool(data and data.get("done"))
+        _step = self.seq.current()
+        self._discard_taskpage()
+        if _done:
+            self.data.protocol.set_mechanism_calibrated(_step.mech)
+            self.seq.advance()
+        self._show_ready()
+
+    def _on_task_closed(self, data=None):
+        """A task finished. Review is wired in Task 5; for now just advance."""
+        self.statusBar().showMessage(f"task closed: {data}")
+        self._discard_taskpage()
+        self.seq.advance()
+        self._show_ready()
 
     #
     # Device button
