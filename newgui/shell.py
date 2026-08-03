@@ -14,6 +14,7 @@ from plutofullassesssdata import PlutoAssessmentData
 from qtpluto import QtPluto
 from s3sync import S3SyncWorker, load_s3_config
 
+from newgui import errors
 from newgui.pages import build_page
 from newgui.sequencer import CALIB, Sequencer, Step, disc_skip_reason
 from newgui.setup import EmbeddedSetupPage
@@ -373,12 +374,25 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
             self.data.protocol.set_mechanism(_step.mech)
             self.data.detailedsummary.set_mechanism(_step.mech)
         _cb = self._on_calib_closed if _step.is_calib else self._on_task_closed
-        if not _step.is_calib:
-            # set_task stamps the task time that the raw/summary filenames use,
-            # so it must happen before the page is built.
-            self.data.protocol.set_task(_step.task)
-            self.data.detailedsummary.set_task(_step.task)
-        self._taskpage = build_page(_step, self.pluto, self.data, _cb)
+        try:
+            if not _step.is_calib:
+                # set_task stamps the task time that the raw/summary filenames
+                # use, so it must happen before the page is built.
+                self.data.protocol.set_task(_step.task)
+                self.data.detailedsummary.set_task(_step.task)
+            self._taskpage = build_page(_step, self.pluto, self.data, _cb)
+        except Exception as _exc:
+            # Park on the ready screen rather than leaving a half-built page in
+            # the stack; the operator can press the button to try again.
+            errors.log_exception(f"Starting {_step.mech}/{_step.task}", _exc)
+            self._taskpage = None
+            errors.show_error(
+                "Could not start this task",
+                f"{_step.mech} · {STEP_LABELS.get(_step.task, _step.task)} "
+                f"could not be started.\n\n{type(_exc).__name__}: {_exc}",
+            )
+            self._show_ready()
+            return
         self.stack.addWidget(self._taskpage)
         self.stack.setCurrentWidget(self._taskpage)
         self._update_header()
@@ -418,11 +432,14 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
 
     def _on_accept(self):
         _step = self.seq.current()
-        self._persist(
+        if not self._persist(
             status=pfadef.AssessStatus.COMPLETE.value,
             payload=self._lastpayload,
             write_protocol=True,
-        )
+        ):
+            # Nothing was recorded — stay on the review so the operator can
+            # retry rather than losing the trial to a write failure.
+            return
         self._discard_taskpage()
         self.seq.mark_completed(_step)
         self._after_accept(_step)
@@ -430,7 +447,9 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
     def _on_redo(self):
         """Log the attempt as rejected (details JSON only, so the protocol row
         stays open) and run the same step again."""
-        _step = self.seq.current()
+        # A failed write is logged and shown by _persist; the retry still runs,
+        # since the attempt being redone is the one that would have been
+        # recorded as rejected anyway.
         self._persist(
             status=pfadef.AssessStatus.REJECTED.value,
             payload=self._lastpayload,
@@ -439,25 +458,39 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         self._discard_taskpage()
         self._start_current_step()
 
-    def _persist(self, status: str, payload: dict, write_protocol: bool):
+    def _persist(self, status: str, payload: dict, write_protocol: bool) -> bool:
+        """Record the finished attempt. Returns False if nothing was written —
+        a full disk or a locked CSV must not be swallowed, and must not let the
+        flow move on as though the trial had been saved."""
         _protocol = self.data.protocol
-        self.data.detailedsummary.update(
-            romval=payload.get("romval"),
-            session=self.data.session,
-            tasktime=_protocol.tasktime,
-            rawfile=_protocol.rawfilename,
-            summaryfile=_protocol.summaryfilename,
-            taskcomment="",
-            status=status,
-        )
-        if write_protocol:
-            _protocol.update(
+        try:
+            self.data.detailedsummary.update(
+                romval=payload.get("romval"),
                 session=self.data.session,
+                tasktime=_protocol.tasktime,
                 rawfile=_protocol.rawfilename,
                 summaryfile=_protocol.summaryfilename,
                 taskcomment="",
                 status=status,
             )
+            if write_protocol:
+                _protocol.update(
+                    session=self.data.session,
+                    rawfile=_protocol.rawfilename,
+                    summaryfile=_protocol.summaryfilename,
+                    taskcomment="",
+                    status=status,
+                )
+        except Exception as _exc:
+            errors.log_exception(f"Saving {_protocol.mech}/{_protocol.task}", _exc)
+            errors.show_error(
+                "Could not save this task",
+                f"{type(_exc).__name__}: {_exc}\n\n"
+                "Nothing was recorded. Close any program holding the CSV files "
+                "open and press Accept again.",
+            )
+            return False
+        return True
 
     def _skip_step(self, task: str, reason: str):
         """Record a task as skipped and step the sequencer past it. skip_task
@@ -503,10 +536,27 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
             self._start_current_step()
 
     def closeEvent(self, event):
+        """Shut the background threads down before their objects are destroyed.
+
+        JediComm (inside QtPluto) and S3SyncWorker are QThreads. Destroying a
+        running QThread is fatal to Qt — "QThread: Destroyed while thread is
+        still running" — so each one is asked to stop and then waited for."""
+        errors.log("Closing the guided GUI")
         self.statustimer.stop()
         self.heartbeattimer.stop()
+        # Drop the task page first: it holds device callbacks and CSV writers.
+        try:
+            self._discard_taskpage()
+        except Exception as _exc:
+            errors.log_exception("Discarding the task page on close", _exc)
+        try:
+            self.pluto.stop_sensorstream()
+            self.pluto.close()
+        except Exception as _exc:
+            errors.log_exception("Closing the PLUTO connection", _exc)
         try:
             self._s3sync.stop()
-        except Exception:
-            pass
+            self._s3sync.wait(5000)
+        except Exception as _exc:
+            errors.log_exception("Stopping the S3 sync worker", _exc)
         return super().closeEvent(event)
