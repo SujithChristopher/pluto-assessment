@@ -253,6 +253,10 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
     # Setup
     #
     def _on_setup_start(self, setup: dict):
+        # The setup page stays on screen while the worker runs, so a second
+        # Start would launch a second worker and create a stray session folder.
+        if self._setup_worker is not None:
+            return
         self.data.setup_session(setup)
         self.seq = Sequencer(setup["mode"])
         self.statusBar().showMessage("Creating session folder and protocol...")
