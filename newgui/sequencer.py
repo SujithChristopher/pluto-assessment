@@ -100,6 +100,30 @@ class Sequencer:
         self._cursor += 1
         self._skip_completed()
 
+    def restrict_to(self, available: Iterable[tuple[str, str]]) -> None:
+        """Keep only the steps the session's protocol actually contains.
+
+        Not every task is in every protocol: tasks whose TASK_DEPENDENCIES entry
+        has in_unaffected=False (AROM, PROM, APROM) are gated out when the limb
+        being assessed is not the affected one, leaving DISC alone. Walking a
+        step that has no protocol row would raise from protocol.set_task, so the
+        step list is trimmed to the protocol before the flow starts. A
+        mechanism's calibration step survives only if that mechanism kept at
+        least one task."""
+        _avail = {(_m, _t) for _m, _t in available}
+        _steps = []
+        _calibrated = set()
+        for _step in self.steps:
+            if _step.is_calib or (_step.mech, _step.task) not in _avail:
+                continue
+            if _step.mech not in _calibrated:
+                _calibrated.add(_step.mech)
+                _steps.append(Step(_step.mech, CALIB))
+            _steps.append(_step)
+        self.steps = _steps
+        self._cursor = 0
+        self._skip_completed()
+
     def resume_from(self, completed: Iterable[tuple[str, str]]) -> None:
         """Rewind to the first step that is not already done."""
         self._completed = {(_m, _t) for _m, _t in completed}

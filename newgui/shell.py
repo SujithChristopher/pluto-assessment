@@ -273,11 +273,24 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
                 "screening" if self.data.is_screening else f"TP: {self.data.timepoint}",
             ))
         )
+        # The protocol is the authority on which tasks this session runs — the
+        # unaffected limb, for one, gets DISC only — so trim the step list to it
+        # before walking anything.
+        self.seq.restrict_to(self._protocol_pairs())
         _completed = self._completed_pairs()
         if _completed:
             self.seq.resume_from(_completed)
             self._resumed = True
         self._show_ready()
+
+    def _protocol_pairs(self):
+        """Every (mechanism, task) pair the session's protocol CSV contains."""
+        _df = self.data.protocol.df
+        if _df is None:
+            return []
+        return list(
+            dict.fromkeys(zip(_df["mechanism"].tolist(), _df["task"].tolist()))
+        )
 
     def _completed_pairs(self):
         """(mechanism, task) pairs whose protocol row already has a session —

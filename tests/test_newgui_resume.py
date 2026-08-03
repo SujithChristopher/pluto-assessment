@@ -35,18 +35,30 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pandas as pd
 
+import plutofullassessdef as pfadef
 from newgui.sequencer import CALIB, Sequencer, Step
 from newgui.shell import PlutoGuidedAssessor
+
+
+def _stub_for(_df):
+    """Minimal duck-typed stand-in for self: both extraction methods read only
+    self.data.protocol.df, so they can be called unbound without constructing a
+    PlutoGuidedAssessor (which would need a live QtPluto/serial connection)."""
+    return types.SimpleNamespace(
+        data=types.SimpleNamespace(protocol=types.SimpleNamespace(df=_df))
+    )
 
 
 def _completed_pairs_from_df(_df):
     """Calls the real, shipped PlutoGuidedAssessor._completed_pairs against a
     minimal stub for self, so this test exercises the actual implementation
     rather than a hand-copied reimplementation of it."""
-    _stub = types.SimpleNamespace(
-        data=types.SimpleNamespace(protocol=types.SimpleNamespace(df=_df))
-    )
-    return PlutoGuidedAssessor._completed_pairs(_stub)
+    return PlutoGuidedAssessor._completed_pairs(_stub_for(_df))
+
+
+def _protocol_pairs_from_df(_df):
+    """Same, for the real PlutoGuidedAssessor._protocol_pairs."""
+    return PlutoGuidedAssessor._protocol_pairs(_stub_for(_df))
 
 
 def _protocol_df(rows):
@@ -108,8 +120,6 @@ def test_mixed_statuses_all_count_as_finished():
 
 
 def test_entirely_finished_protocol_resumes_past_the_end():
-    import plutofullassessdef as pfadef
-
     _rows = []
     for _m in pfadef.MECHANISMS:
         for _t in ("AROM", "PROM", "APROM", "DISC"):
@@ -120,6 +130,57 @@ def test_entirely_finished_protocol_resumes_past_the_end():
     seq = Sequencer("assessment")
     seq.resume_from(_pairs)
     assert seq.is_done() is True
+
+
+def test_unaffected_limb_protocol_walks_disc_only():
+    """AROM/PROM/APROM are gated out of the protocol when the limb assessed is
+    not the affected one, leaving DISC. The flow must walk exactly what the
+    protocol contains — stepping into a task with no protocol row raises from
+    protocol.set_task."""
+    _df = _protocol_df(
+        [(_m, "DISC", None, "Incomplete") for _m in pfadef.MECHANISMS]
+    )
+    seq = Sequencer("assessment")
+    seq.restrict_to(_protocol_pairs_from_df(_df))
+    assert [(_s.mech, _s.task) for _s in seq.steps] == [
+        _pair
+        for _m in pfadef.MECHANISMS
+        for _pair in ((_m, CALIB), (_m, "DISC"))
+    ], seq.steps
+    assert seq.current() == Step(pfadef.MECHANISMS[0], CALIB), seq.current()
+    seq.advance()
+    assert seq.current() == Step(pfadef.MECHANISMS[0], "DISC"), seq.current()
+
+
+def test_restrict_then_resume_lands_on_first_unfinished_task():
+    """restrict_to runs before resume_from in _on_setup_finished; the two must
+    compose."""
+    _df = _protocol_df(
+        [
+            ("FPS", "DISC", "20260101_120000", "Complete"),
+            ("WFE", "DISC", None, "Incomplete"),
+            ("WURD", "DISC", None, "Incomplete"),
+            ("HOC", "DISC", None, "Incomplete"),
+        ]
+    )
+    seq = Sequencer("assessment")
+    seq.restrict_to(_protocol_pairs_from_df(_df))
+    seq.resume_from(_completed_pairs_from_df(_df))
+    assert seq.current() == Step("WFE", CALIB), seq.current()
+    seq.advance()
+    assert seq.current() == Step("WFE", "DISC"), seq.current()
+
+
+def test_restrict_to_a_full_assessment_protocol_changes_nothing():
+    _rows = [
+        (_m, _t, None, "Incomplete")
+        for _m in pfadef.MECHANISMS
+        for _t in ("AROM", "PROM", "APROM", "DISC")
+    ]
+    seq = Sequencer("assessment")
+    _before = list(seq.steps)
+    seq.restrict_to(_protocol_pairs_from_df(_protocol_df(_rows)))
+    assert seq.steps == _before, seq.steps
 
 
 def test_no_protocol_dataframe_yields_no_pairs():
