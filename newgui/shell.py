@@ -120,6 +120,7 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         self._setup_worker = None
         self._taskpage = None
         self._resumed = False
+        self._lastpayload = {}
 
         self._build_ui()
         self._init_timers()
@@ -180,6 +181,9 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         _foot.addWidget(self.pbAccept)
         _outer.addLayout(_foot)
         self._set_footer_hint("")
+
+        self.pbAccept.clicked.connect(self._on_accept)
+        self.pbRedo.clicked.connect(self._on_redo)
 
     def _set_footer_hint(self, text: str):
         self.lblHint.setText(text)
@@ -353,9 +357,72 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         self._show_ready()
 
     def _on_task_closed(self, data=None):
-        """A task finished. Review is wired in Task 5; for now just advance."""
-        self.statusBar().showMessage(f"task closed: {data}")
+        """A task page finished. Keep its display on screen and swap the footer
+        to Accept / Redo. closeEvent() only hides an embedded widget, so it is
+        re-shown here to freeze the final display for the operator."""
+        self._lastpayload = dict(data or {})
+        # The task terminated itself (too many failed AROM trials): no review.
+        if self._lastpayload.get("status") == pfadef.AssessStatus.SKIPPED.value:
+            self._handle_task_terminated(self._lastpayload)
+            return
+        if self._taskpage is not None:
+            self._taskpage.show()
+            self.stack.setCurrentWidget(self._taskpage)
+        self._set_footer_review()
+
+    def _on_accept(self):
+        _step = self.seq.current()
+        self._persist(
+            status=pfadef.AssessStatus.COMPLETE.value,
+            payload=self._lastpayload,
+            write_protocol=True,
+        )
         self._discard_taskpage()
+        self.seq.mark_completed(_step)
+        self._after_accept(_step)
+
+    def _on_redo(self):
+        """Log the attempt as rejected (details JSON only, so the protocol row
+        stays open) and run the same step again."""
+        _step = self.seq.current()
+        self._persist(
+            status=pfadef.AssessStatus.REJECTED.value,
+            payload=self._lastpayload,
+            write_protocol=False,
+        )
+        self._discard_taskpage()
+        self._start_current_step()
+
+    def _persist(self, status: str, payload: dict, write_protocol: bool):
+        _protocol = self.data.protocol
+        self.data.detailedsummary.update(
+            romval=payload.get("romval"),
+            session=self.data.session,
+            tasktime=_protocol.tasktime,
+            rawfile=_protocol.rawfilename,
+            summaryfile=_protocol.summaryfilename,
+            taskcomment="",
+            status=status,
+        )
+        if write_protocol:
+            _protocol.update(
+                session=self.data.session,
+                rawfile=_protocol.rawfilename,
+                summaryfile=_protocol.summaryfilename,
+                taskcomment="",
+                status=status,
+            )
+
+    def _after_accept(self, step):
+        """Advance past the accepted step. Auto-skip rules land here in Task 6."""
+        self.seq.advance()
+        self._show_ready()
+
+    def _handle_task_terminated(self, payload):
+        """Placeholder until Task 6; treated as an accepted-and-done step."""
+        _step = self.seq.current()
+        self._discard_taskpage()
+        self.seq.mark_completed(_step)
         self.seq.advance()
         self._show_ready()
 
