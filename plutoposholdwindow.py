@@ -465,9 +465,6 @@ class PlutoPositionHoldAssessWindow(QtWidgets.QMainWindow):
         # Attach callbacks
         self._attach_pluto_callbacks()
 
-        # Attach control callbacks
-        self.ui.cbTrialRun.clicked.connect(self._callback_trialrun_clicked)
-
         # Update UI.
         self.update_ui()
 
@@ -495,15 +492,6 @@ class PlutoPositionHoldAssessWindow(QtWidgets.QMainWindow):
     # Update UI
     #
     def update_ui(self):
-        # Trial run checkbox
-        if self.ui.cbTrialRun.isEnabled():
-            _cond1 = self.data.demomode is False
-            _cond2 = (
-                self.data.demomode is None and self._smachine.state == States.GOTO_TGT
-            )
-            if _cond1 or _cond2:
-                self.ui.cbTrialRun.setEnabled(False)
-
         # Update main text
         if self.pluto.angle is None:
             return
@@ -666,17 +654,6 @@ class PlutoPositionHoldAssessWindow(QtWidgets.QMainWindow):
             pdef.PlutoEvents.RELEASED, dt=self.pluto.delt()
         )
         self.update_ui()
-
-    #
-    # Control Callbacks
-    #
-    def _callback_trialrun_clicked(self):
-        if self.data.demomode is None and self.ui.cbTrialRun.isChecked():
-            self.data.demomode = True
-        if self.data.demomode and not self.ui.cbTrialRun.isChecked():
-            self.data.demomode = False
-            # Restart ROM assessment statemachine
-            self._smachine.reset_statemachine()
 
     def closeEvent(self, event):
         # Get comment from the experimenter.

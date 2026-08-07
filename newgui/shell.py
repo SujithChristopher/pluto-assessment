@@ -127,24 +127,39 @@ class ReadyPage(QtWidgets.QWidget):
             self.lblImage.setVisible(False)
 
 
+# End-of-session readout colours.
+SCORE_OK = "#0a7d00"        # AROM recorded, and above threshold when judged
+SCORE_LOW = "#b45309"       # measured, but under the screening threshold
+SCORE_FAILED = "#aa0000"    # attempted and not finished inside the time limit
+SCORE_NONE = "#9aa0a6"      # never attempted
+SCORE_INK = "#202124"       # a plain number, with no verdict attached to it
+
+
 class DonePage(QtWidgets.QWidget):
-    """End of session."""
+    """End of session: what was measured, per mechanism.
+
+    Screening judges each AROM against its threshold and leads with the
+    eligibility verdict. Assessment makes no judgement — it just shows the
+    numbers, so the operator can sanity-check the session before the subject
+    leaves."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         _lay = QtWidgets.QVBoxLayout(self)
+        _lay.setContentsMargins(40, 24, 40, 32)
         _lay.addStretch(1)
         self.lblTitle = QtWidgets.QLabel("Session complete")
         self.lblTitle.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.lblTitle.setStyleSheet("font-size: 24pt; font-weight: 600;")
+        self.lblTitle.setStyleSheet("font-size: 30pt; font-weight: 700;")
         _lay.addWidget(self.lblTitle)
+        _lay.addSpacing(6)
         self.lblDetail = QtWidgets.QLabel("")
         self.lblDetail.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.lblDetail.setStyleSheet("font-size: 15pt;")
+        self.lblDetail.setStyleSheet("font-size: 17pt;")
         _lay.addWidget(self.lblDetail)
-        # Per-mechanism screening scores. The verdict above is a single word; on
-        # its own it does not say which mechanism carried it, which is what the
-        # operator needs when a borderline subject has to be explained later.
+        # Per-mechanism scores. A verdict or a subject id on its own does not say
+        # which mechanism produced what, which is exactly what the operator needs
+        # when a borderline session has to be explained later.
         self.lblScores = QtWidgets.QLabel("")
         self.lblScores.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.lblScores.setTextFormat(QtCore.Qt.TextFormat.RichText)
@@ -156,12 +171,47 @@ class DonePage(QtWidgets.QWidget):
             QtWidgets.QSizePolicy.Policy.Maximum,
         )
         self.lblScores.setVisible(False)
-        _lay.addSpacing(18)
+        _lay.addSpacing(30)
         _lay.addWidget(self.lblScores, 0, QtCore.Qt.AlignmentFlag.AlignHCenter)
-        _lay.addStretch(1)
+        _lay.addStretch(2)
+
+    #
+    # Score table
+    #
+    @staticmethod
+    def _arom_cell(entry):
+        """The measured range, or why there is no number. Returns (text, colour)."""
+        if entry["outcome"] == "complete":
+            return f"{entry['value']:.1f} {entry['unit']}", None
+        if entry["outcome"] == "failed":
+            return "failed", SCORE_FAILED
+        return "—", SCORE_NONE
+
+    @staticmethod
+    def _table(headers, rows):
+        _head = "".join(
+            f"<th style='text-align:{_al}; padding:0 34px 12px 0;"
+            f" font-size:11pt; font-weight:600; color:#6b7280;"
+            f" letter-spacing:1px;'>{_h.upper()}</th>"
+            for _h, _al in headers
+        )
+        return (
+            "<div style='font-size:16pt;'>"
+            "<table cellspacing='0' cellpadding='0'>"
+            f"<tr>{_head}</tr>{''.join(rows)}</table></div>"
+        )
+
+    @staticmethod
+    def _cell(text, align="left", color=None, bold=False):
+        _style = f"padding:11px 34px 11px 0; text-align:{align};"
+        if color:
+            _style += f" color:{color};"
+        if bold:
+            _style += " font-weight:600;"
+        return f"<td style='{_style}'>{text}</td>"
 
     def show_screening_scores(self, stats: dict, order):
-        """Render the AROM reached per mechanism against its threshold.
+        """AROM reached per mechanism against its screening threshold.
 
         stats comes straight from get_screening_eligibility(); order is the
         mechanism order the session was run in, so the table reads in the order
@@ -171,36 +221,55 @@ class DonePage(QtWidgets.QWidget):
             _s = stats.get(_mech)
             if _s is None:
                 continue
-            if not _s["done"]:
-                _val, _verdict, _color = "—", "not recorded", "#9aa0a6"
-            else:
-                _val = f"{_s['value']:.1f} {_s['unit']}"
+            _val, _valcolor = self._arom_cell(_s)
+            if _s["outcome"] == "complete":
                 _verdict = "pass" if _s["pass"] else "below threshold"
-                _color = "#0a7d00" if _s["pass"] else "#aa0000"
+                _valcolor = SCORE_OK if _s["pass"] else SCORE_LOW
+            else:
+                _verdict = "not completed in time" if _s["outcome"] == "failed" \
+                    else "not attempted"
             _rows.append(
-                f"<tr>"
-                f"<td style='padding:6px 22px 6px 0;'>"
-                f"{pfadef.MECH_LABELS.get(_mech, _mech)}</td>"
-                f"<td style='padding:6px 22px 6px 0; text-align:right;"
-                f" font-weight:600; color:{_color};'>{_val}</td>"
-                f"<td style='padding:6px 22px 6px 0; text-align:right;"
-                f" color:#6b7280;'>&ge; {_s['threshold']:g} {_s['unit']}</td>"
-                f"<td style='padding:6px 0; color:{_color};'>{_verdict}</td>"
-                f"</tr>"
+                "<tr>"
+                + self._cell(pfadef.MECH_LABELS.get(_mech, _mech))
+                + self._cell(_val, "right", _valcolor, bold=True)
+                + self._cell(
+                    f"&ge; {_s['threshold']:g} {_s['unit']}", "right", "#6b7280"
+                )
+                + self._cell(_verdict, "left", _valcolor)
+                + "</tr>"
             )
-        self.lblScores.setText(
-            "<div style='font-size:13pt;'>"
-            "<table cellspacing='0' cellpadding='0'>"
-            "<tr style='color:#6b7280;'>"
-            "<th style='text-align:left; padding:0 22px 8px 0;'>Mechanism</th>"
-            "<th style='text-align:right; padding:0 22px 8px 0;'>AROM</th>"
-            "<th style='text-align:right; padding:0 22px 8px 0;'>Threshold</th>"
-            "<th style='text-align:left; padding:0 0 8px 0;'></th>"
-            "</tr>" + "".join(_rows) + "</table></div>"
+        self._set_rows(
+            [("Mechanism", "left"), ("AROM", "right"),
+             ("Threshold", "right"), ("Result", "left")],
+            _rows,
         )
-        self.lblScores.setVisible(bool(_rows))
 
-    def clear_screening_scores(self):
+    def show_assessment_scores(self, summary: dict, order):
+        """AROM recorded per mechanism, with no verdict attached.
+
+        summary comes from get_arom_summary(). Assessment does not judge the
+        numbers, so there is no threshold and no pass/fail — a mechanism the
+        subject could not complete in time still reads "failed", because that is
+        what happened, not a score."""
+        _rows = []
+        for _mech in order:
+            _s = summary.get(_mech)
+            if _s is None:
+                continue
+            _val, _valcolor = self._arom_cell(_s)
+            _rows.append(
+                "<tr>"
+                + self._cell(pfadef.MECH_LABELS.get(_mech, _mech))
+                + self._cell(_val, "right", _valcolor or SCORE_INK, bold=True)
+                + "</tr>"
+            )
+        self._set_rows([("Mechanism", "left"), ("AROM", "right")], _rows)
+
+    def _set_rows(self, headers, rows):
+        self.lblScores.setText(self._table(headers, rows) if rows else "")
+        self.lblScores.setVisible(bool(rows))
+
+    def clear_scores(self):
         self.lblScores.setText("")
         self.lblScores.setVisible(False)
 
@@ -476,23 +545,31 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         self.stack.setCurrentWidget(self.pageDone)
         self.lblHeader.setText("Done")
         self.lblCounter.setText("")
-        if self.data.is_screening and self.data.detailedsummary is not None:
+        _order = mechanisms_for_mode(self.data.mode)
+        if self.data.detailedsummary is None:
+            self.pageDone.lblDetail.setText(f"{self.data.subjid} · {self.data.limb}")
+            self.pageDone.clear_scores()
+        elif self.data.is_screening:
             _eligible, _stats = self.data.detailedsummary.get_screening_eligibility()
             self.pageDone.lblDetail.setText(
                 "ELIGIBLE" if _eligible else "NOT ELIGIBLE"
             )
             self.pageDone.lblDetail.setStyleSheet(
-                "font-size: 20pt; font-weight: 600; color: "
+                "font-size: 26pt; font-weight: 700; letter-spacing: 2px; color: "
                 + ("rgb(0,120,0);" if _eligible else "rgb(170,0,0);")
             )
-            self.pageDone.show_screening_scores(
-                _stats, mechanisms_for_mode(self.data.mode)
-            )
+            self.pageDone.show_screening_scores(_stats, _order)
         else:
+            # Assessment states the facts of the session, not a verdict.
             self.pageDone.lblDetail.setText(
-                f"{self.data.subjid} · {self.data.limb}"
+                f"{self.data.subjid} · {self.data.limb} · {self.data.timepoint}"
             )
-            self.pageDone.clear_screening_scores()
+            self.pageDone.lblDetail.setStyleSheet(
+                "font-size: 17pt; color: #3c4043;"
+            )
+            self.pageDone.show_assessment_scores(
+                self.data.detailedsummary.get_arom_summary(), _order
+            )
         self._set_footer_hint("You can close the window.")
         self._kick_sync()
 

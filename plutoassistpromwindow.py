@@ -708,9 +708,6 @@ class PlutoAssistPRomAssessWindow(QtWidgets.QMainWindow):
         # Attach callbacks
         self._attach_pluto_callbacks()
 
-        # Attach control callbacks
-        self.ui.cbTrialRun.clicked.connect(self._callback_trialrun_clicked)
-
         # Update UI.
         self.update_ui()
 
@@ -734,15 +731,6 @@ class PlutoAssistPRomAssessWindow(QtWidgets.QMainWindow):
     # Update UI
     #
     def update_ui(self):
-        # Trial run checkbox
-        if self.ui.cbTrialRun.isEnabled():
-            _cond1 = self.data.demomode is False
-            _cond2 = (
-                self.data.demomode is None and self._smachine.state == States.TORQ_DIR1
-            )
-            if _cond1 or _cond2:
-                self.ui.cbTrialRun.setEnabled(False)
-
         # Update main text
         if self.pluto.angle is None:
             return
@@ -1155,17 +1143,6 @@ class PlutoAssistPRomAssessWindow(QtWidgets.QMainWindow):
     #         if self.pluto.controltype != pdef.ControlTypes["TORQUE"]:
     #             self.pluto.set_control_type("TORQUE")
     #         self.pluto.set_control_target(target=-1.0, dur=2.0)
-
-    #
-    # Control Callbacks
-    #
-    def _callback_trialrun_clicked(self):
-        if self.data.demomode is None and self.ui.cbTrialRun.isChecked():
-            self.data.demomode = True
-        if self.data.demomode and not self.ui.cbTrialRun.isChecked():
-            self.data.demomode = False
-            # Restart ROM assessment statemachine
-            self._smachine.reset_statemachine()
 
     def closeEvent(self, event):
         # Flush and close the CSV writers before anything else can return out of

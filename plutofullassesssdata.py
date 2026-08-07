@@ -775,29 +775,61 @@ class PlutoAssessmentDetailsData(object):
             return _rom
         return None
 
+    # Outcomes an AROM attempt can end in, as recorded in the details JSON. A
+    # task the subject could not finish inside AROM.TRIAL_TIME_LIMIT is logged
+    # Skipped by the terminate path, and Terminated by the old GUI's dialog —
+    # both mean "attempted and failed", which is not the same as never tried.
+    AROM_FAILED_STATUSES = (
+        pfadef.AssessStatus.SKIPPED.value,
+        pfadef.AssessStatus.TERMINATED.value,
+    )
+
+    def get_arom_summary(self):
+        """Per-mechanism AROM outcome for the end-of-session readout.
+
+        Maps each mechanism to {value, unit, outcome}, where outcome is:
+          "complete"      — AROM recorded; value is the range in unit
+          "failed"        — attempted but not finished in the time limit
+          "not attempted" — no AROM entry at all (never reached, or not in this
+                            session's protocol)
+        value is None unless the outcome is "complete"."""
+        _out = {}
+        for _m in pfadef.MECHANISMS:
+            _rom = self.get_arom_for_mech(_m)
+            if _rom is not None:
+                _outcome, _val = "complete", abs(_rom[1] - _rom[0])
+            else:
+                try:
+                    _status = self._val[_m]["tasks"]["AROM"][-1].get("status")
+                except (KeyError, IndexError):
+                    _status = None
+                _outcome = (
+                    "failed" if _status in self.AROM_FAILED_STATUSES
+                    else "not attempted"
+                )
+                _val = None
+            _out[_m] = {
+                "value": _val,
+                "unit": pfadef.MECH_UNITS[_m],
+                "outcome": _outcome,
+            }
+        return _out
+
     def get_screening_eligibility(self):
         """Compute screening eligibility from recorded AROM. A subject is
         eligible if ANY mechanism's AROM range meets its threshold (joints in
-        deg, HOC in cm). Returns (eligible, stats) where stats maps each
-        mechanism to {value, threshold, unit, pass, done}; mechanisms whose AROM
-        is not yet completed have value=None and done=False."""
-        _stats = {}
+        deg, HOC in cm). Returns (eligible, stats) where stats is
+        get_arom_summary() with each mechanism's threshold and pass flag added.
+        Only a completed AROM can pass — a failed or unattempted one cannot."""
+        _stats = self.get_arom_summary()
         _eligible = False
-        for _m in pfadef.MECHANISMS:
+        for _m, _s in _stats.items():
             _thresh = pfadef.SCREENING_AROM_THRESHOLDS[_m]
-            _rom = self.get_arom_for_mech(_m)
-            _done = _rom is not None
-            _val = abs(_rom[1] - _rom[0]) if _done else None
-            _passed = _done and _val >= _thresh
+            _passed = _s["outcome"] == "complete" and _s["value"] >= _thresh
             if _passed:
                 _eligible = True
-            _stats[_m] = {
-                "value": _val,
-                "threshold": _thresh,
-                "unit": pfadef.SCREENING_AROM_UNITS[_m],
-                "pass": _passed,
-                "done": _done,
-            }
+            _s["threshold"] = _thresh
+            _s["pass"] = _passed
         return _eligible, _stats
 
     def get_prom(self):

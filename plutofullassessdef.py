@@ -180,11 +180,15 @@ HIDDEN_TASKS = ["FCTRLLOW", "FCTRLMED", "FCTRLHIGH"]
 # Screening protocol: AROM only, every mechanism.
 SCREENING_MECH_TASKS = {_m: [["AROM"]] for _m in MECHANISMS}
 
+# Unit each mechanism is measured in: joints are angles in degrees, HOC is the
+# hand aperture in cm. Used by every end-of-session readout, both modes.
+MECH_UNITS = {"FPS": "deg", "WFE": "deg", "WURD": "deg", "HOC": "cm"}
+
 # Screening eligibility: minimum AROM each mechanism must reach for the subject
-# to be included in the study. Joint mechanisms are in degrees; HOC is the hand
-# aperture in cm. A subject is eligible if ANY mechanism meets its threshold.
+# to be included in the study. A subject is eligible if ANY mechanism meets its
+# threshold.
 SCREENING_AROM_THRESHOLDS = {"FPS": 10.0, "WFE": 10.0, "WURD": 10.0, "HOC": 2.0}
-SCREENING_AROM_UNITS = {"FPS": "deg", "WFE": "deg", "WURD": "deg", "HOC": "cm"}
+SCREENING_AROM_UNITS = dict(MECH_UNITS)
 
 TASK_DEPENDENCIES = {
     "AROM": {"in_unaffected": False, "depends_on": []},

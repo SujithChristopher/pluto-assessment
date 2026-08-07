@@ -15,9 +15,8 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QCheckBox, QGraphicsView, QHBoxLayout,
-    QLabel, QMainWindow, QSizePolicy, QVBoxLayout,
-    QWidget)
+from PySide6.QtWidgets import (QApplication, QGraphicsView, QHBoxLayout, QLabel,
+    QMainWindow, QSizePolicy, QVBoxLayout, QWidget)
 
 class Ui_APRomAssessWindow(object):
     def setupUi(self, APRomAssessWindow):
@@ -49,17 +48,6 @@ class Ui_APRomAssessWindow(object):
 
         self.horizontalLayout.addWidget(self.lblTitle)
 
-        self.cbTrialRun = QCheckBox(self.verticalLayoutWidget)
-        self.cbTrialRun.setObjectName(u"cbTrialRun")
-        self.cbTrialRun.setMaximumSize(QSize(90, 16777215))
-        font2 = QFont()
-        font2.setFamilies([u"Cascadia Mono Light"])
-        font2.setPointSize(10)
-        self.cbTrialRun.setFont(font2)
-        self.cbTrialRun.setStyleSheet(u"color: rgb(170, 0, 0);")
-
-        self.horizontalLayout.addWidget(self.cbTrialRun)
-
 
         self.verticalLayout.addLayout(self.horizontalLayout)
 
@@ -70,6 +58,9 @@ class Ui_APRomAssessWindow(object):
 
         self.lblStatus = QLabel(self.verticalLayoutWidget)
         self.lblStatus.setObjectName(u"lblStatus")
+        font2 = QFont()
+        font2.setFamilies([u"Cascadia Mono Light"])
+        font2.setPointSize(10)
         self.lblStatus.setFont(font2)
 
         self.verticalLayout.addWidget(self.lblStatus)
@@ -84,7 +75,6 @@ class Ui_APRomAssessWindow(object):
     def retranslateUi(self, APRomAssessWindow):
         APRomAssessWindow.setWindowTitle(QCoreApplication.translate("APRomAssessWindow", u"PLUTO A/P/AP ROM Assessment", None))
         self.lblTitle.setText(QCoreApplication.translate("APRomAssessWindow", u"PLUTO ROM Assessment", None))
-        self.cbTrialRun.setText(QCoreApplication.translate("APRomAssessWindow", u"Trial Run", None))
         self.lblStatus.setText(QCoreApplication.translate("APRomAssessWindow", u"TextLabel", None))
     # retranslateUi
 

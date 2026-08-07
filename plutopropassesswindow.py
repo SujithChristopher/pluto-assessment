@@ -744,9 +744,6 @@ class PlutoPropAssessWindow(QtWidgets.QMainWindow):
         # Attach callbacks
         self._attach_pluto_callbacks()
 
-        # Attach control callbacks
-        self.ui.cbTrialRun.clicked.connect(self._callback_trialrun_clicked)
-
         self.on_close_callback = onclosecb
 
         # Update UI.
@@ -784,16 +781,6 @@ class PlutoPropAssessWindow(QtWidgets.QMainWindow):
     def outdir(self):
         return self._outdir
 
-    #
-    # Control Callbacks
-    #
-    def _callback_trialrun_clicked(self):
-        if self.data.demomode is None and self.ui.cbTrialRun.isChecked():
-            self.data.demomode = True
-        if self.data.demomode and not self.ui.cbTrialRun.isChecked():
-            self.data.demomode = False
-            # Restart ROM assessment statemachine
-            self._smachine.reset_statemachine()
 
     #
     # Window close event
@@ -834,15 +821,6 @@ class PlutoPropAssessWindow(QtWidgets.QMainWindow):
     # Update UI
     #
     def update_ui(self):
-        # Demo run checkbox
-        if self.ui.cbTrialRun.isEnabled():
-            _cond1 = self.data.demomode is False
-            _cond2 = (
-                self.data.demomode is None and self._smachine.state == States.DEMO_WAIT
-            )
-            if _cond1 or _cond2:
-                self.ui.cbTrialRun.setEnabled(False)
-
         # Update current hand position
         if self.pluto.hocdisp is None:
             return
