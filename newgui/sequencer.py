@@ -8,6 +8,7 @@ device so it can be unit tested.
 from dataclasses import dataclass
 from typing import Iterable
 
+import debugconfig
 import plutofullassessdef as pfadef
 
 # Flow-only step: calibration is never a protocol CSV row.
@@ -51,7 +52,36 @@ def tasks_for_mode(mode: str) -> list[str]:
     return list(SCREENING_TASKS if mode == "screening" else ASSESSMENT_TASKS)
 
 
+def debug_mechanism_order() -> list[str] | None:
+    """The DEBUG mechanism-order override from debugconfig, or None.
+
+    Returns None unless DEBUG is on AND debugconfig.MECHANISM_ORDER names
+    something. A typo would otherwise send the tester through a different order
+    than the one they typed and look like a bug in the flow, so an unknown or
+    repeated name is rejected here instead."""
+    if not getattr(debugconfig, "DEBUG", False):
+        return None
+    _order = getattr(debugconfig, "MECHANISM_ORDER", None)
+    if not _order:
+        return None
+    _order = list(_order)
+    _unknown = [_m for _m in _order if _m not in pfadef.MECHANISMS]
+    if _unknown:
+        raise ValueError(
+            f"debugconfig.MECHANISM_ORDER contains unknown mechanism(s) "
+            f"{_unknown}. Valid names: {list(pfadef.MECHANISMS)}"
+        )
+    if len(set(_order)) != len(_order):
+        raise ValueError(
+            f"debugconfig.MECHANISM_ORDER repeats a mechanism: {_order}"
+        )
+    return _order
+
+
 def mechanisms_for_mode(mode: str) -> list[str]:
+    _override = debug_mechanism_order()
+    if _override is not None:
+        return _override
     return list(SCREENING_MECHANISMS if mode == "screening" else ASSESSMENT_MECHANISMS)
 
 

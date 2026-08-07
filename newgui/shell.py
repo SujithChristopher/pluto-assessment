@@ -21,6 +21,7 @@ from newgui.sequencer import (
     CALIB,
     Sequencer,
     Step,
+    debug_mechanism_order,
     disc_skip_reason,
     mechanisms_for_mode,
 )
@@ -483,13 +484,17 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         self._setup_worker = None
         self.pluto.send_heartbeat()
         self.pluto.set_limb(self.data.limb)
-        self.setWindowTitle(
-            " | ".join((
-                "PLUTO Guided Assessment", self.data.subjid, self.data.mode,
-                f"Limb: {self.data.limb}",
-                "screening" if self.data.is_screening else f"TP: {self.data.timepoint}",
-            ))
-        )
+        _title = [
+            "PLUTO Guided Assessment", self.data.subjid, self.data.mode,
+            f"Limb: {self.data.limb}",
+            "screening" if self.data.is_screening else f"TP: {self.data.timepoint}",
+        ]
+        # A shortened debug walk is easy to leave switched on and then misread as
+        # the flow dropping mechanisms, so it is stated where it cannot be missed.
+        _dbgorder = debug_mechanism_order()
+        if _dbgorder is not None:
+            _title.append("DEBUG ORDER: " + " > ".join(_dbgorder))
+        self.setWindowTitle(" | ".join(_title))
         # The protocol is the authority on which tasks this session runs — the
         # unaffected limb, for one, gets DISC only — so trim the step list to it
         # before walking anything.
