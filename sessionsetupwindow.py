@@ -1,6 +1,10 @@
 """Combined Session Setup window: pick Screening or Assessment, choose/create a
-subject, and set limb / affected side / dominant hand / time point in one modal.
+subject, and set affected side / dominant hand / time point in one modal.
 Replaces SubjectCreator and SubjectSelector.
+
+Both modes assess the affected limb — there is no limb picker. The setup dict
+still carries a "limb" key, equal to the affected side, because it names the
+data folder and every raw/summary filename.
 
 Built programmatically (no .ui) so the whole window is self-contained.
 """
@@ -138,10 +142,6 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
         self.lblAff = QtWidgets.QLabel("Affected side:")
         form.addRow(self.lblAff, self.cbAff)
 
-        self.cbLimb = QtWidgets.QComboBox(); self.cbLimb.addItems(self.SIDES)
-        self.lblLimb = QtWidgets.QLabel("Limb assessed:")
-        form.addRow(self.lblLimb, self.cbLimb)
-
         self.cbDom = QtWidgets.QComboBox(); self.cbDom.addItems(self.SIDES)
         self.lblDom = QtWidgets.QLabel("Dominant hand:")
         form.addRow(self.lblDom, self.cbDom)
@@ -175,7 +175,7 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
         self.txtSubjID.lineEdit().editingFinished.connect(self._on_subjid_changed)
         self.txtSubjID.activated.connect(lambda *_: self._on_subjid_changed())
         self.txtSubjID.currentTextChanged.connect(self.update_ui)
-        for _cb in (self.cbAff, self.cbLimb, self.cbDom, self.cbTP):
+        for _cb in (self.cbAff, self.cbDom, self.cbTP):
             _cb.currentIndexChanged.connect(self.update_ui)
         self.pbStart.clicked.connect(self._on_start)
         self.pbCancel.clicked.connect(self.close)
@@ -198,12 +198,11 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
         return "screening" if self.rbScreening.isChecked() else "assessment"
 
     def _assessment_fields_visible(self, vis):
-        for w in (self.lblLimb, self.cbLimb, self.lblDom, self.cbDom,
-                  self.lblTP, self.cbTP):
+        for w in (self.lblDom, self.cbDom, self.lblTP, self.cbTP):
             w.setVisible(vis)
 
     def _on_mode_changed(self, *_):
-        # Screening: only affected side. Assessment: limb, dominant, timepoint too.
+        # Screening: only affected side. Assessment: dominant hand, timepoint too.
         self._assessment_fields_visible(self.mode == "assessment")
         self._reload_subject_list()  # the two modes have separate subject lists
         self._on_subjid_changed()    # re-lookup against the mode's list
@@ -229,16 +228,18 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
     def update_ui(self):
         ok = self.txtSubjID.currentText().strip() != "" and self.cbAff.currentText() != ""
         if self.mode == "assessment":
-            ok = ok and self.cbLimb.currentText() != "" \
-                and self.cbDom.currentText() != "" and self.cbTP.currentText() != ""
+            ok = ok and self.cbDom.currentText() != "" \
+                and self.cbTP.currentText() != ""
         self.pbStart.setEnabled(ok)
 
     def _on_start(self):
         subjid = self.txtSubjID.currentText().strip().lower()
         afflimb = self.cbAff.currentText().lower()
         mode = self.mode
+        # Both modes assess the affected limb; it is still carried as "limb"
+        # because that is what names the folders and the data files.
+        limb = afflimb
         if mode == "assessment":
-            limb = self.cbLimb.currentText().lower()
             domlimb = self.cbDom.currentText().lower()
             timepoint = self.cbTP.currentText()
             # Enforce timepoint ordering: previous timepoint must be complete.
@@ -258,7 +259,6 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
                 )
                 return
         else:
-            limb = afflimb  # screening screens the affected limb
             domlimb = ""
             timepoint = ""
 

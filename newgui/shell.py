@@ -17,7 +17,13 @@ from s3sync import S3SyncWorker, load_s3_config
 
 from newgui import errors
 from newgui.pages import build_page
-from newgui.sequencer import CALIB, Sequencer, Step, disc_skip_reason
+from newgui.sequencer import (
+    CALIB,
+    Sequencer,
+    Step,
+    disc_skip_reason,
+    mechanisms_for_mode,
+)
 from newgui.setup import EmbeddedSetupPage
 
 # WURD has no artwork of its own; it reuses the wrist flexion/extension image,
@@ -136,7 +142,67 @@ class DonePage(QtWidgets.QWidget):
         self.lblDetail.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.lblDetail.setStyleSheet("font-size: 15pt;")
         _lay.addWidget(self.lblDetail)
+        # Per-mechanism screening scores. The verdict above is a single word; on
+        # its own it does not say which mechanism carried it, which is what the
+        # operator needs when a borderline subject has to be explained later.
+        self.lblScores = QtWidgets.QLabel("")
+        self.lblScores.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.lblScores.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        # Without this a rich-text label takes the full page width and the table
+        # columns drift apart; Maximum makes it hug the table so the centring
+        # below actually centres something table-sized.
+        self.lblScores.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Maximum,
+            QtWidgets.QSizePolicy.Policy.Maximum,
+        )
+        self.lblScores.setVisible(False)
+        _lay.addSpacing(18)
+        _lay.addWidget(self.lblScores, 0, QtCore.Qt.AlignmentFlag.AlignHCenter)
         _lay.addStretch(1)
+
+    def show_screening_scores(self, stats: dict, order):
+        """Render the AROM reached per mechanism against its threshold.
+
+        stats comes straight from get_screening_eligibility(); order is the
+        mechanism order the session was run in, so the table reads in the order
+        the operator saw them."""
+        _rows = []
+        for _mech in order:
+            _s = stats.get(_mech)
+            if _s is None:
+                continue
+            if not _s["done"]:
+                _val, _verdict, _color = "—", "not recorded", "#9aa0a6"
+            else:
+                _val = f"{_s['value']:.1f} {_s['unit']}"
+                _verdict = "pass" if _s["pass"] else "below threshold"
+                _color = "#0a7d00" if _s["pass"] else "#aa0000"
+            _rows.append(
+                f"<tr>"
+                f"<td style='padding:6px 22px 6px 0;'>"
+                f"{pfadef.MECH_LABELS.get(_mech, _mech)}</td>"
+                f"<td style='padding:6px 22px 6px 0; text-align:right;"
+                f" font-weight:600; color:{_color};'>{_val}</td>"
+                f"<td style='padding:6px 22px 6px 0; text-align:right;"
+                f" color:#6b7280;'>&ge; {_s['threshold']:g} {_s['unit']}</td>"
+                f"<td style='padding:6px 0; color:{_color};'>{_verdict}</td>"
+                f"</tr>"
+            )
+        self.lblScores.setText(
+            "<div style='font-size:13pt;'>"
+            "<table cellspacing='0' cellpadding='0'>"
+            "<tr style='color:#6b7280;'>"
+            "<th style='text-align:left; padding:0 22px 8px 0;'>Mechanism</th>"
+            "<th style='text-align:right; padding:0 22px 8px 0;'>AROM</th>"
+            "<th style='text-align:right; padding:0 22px 8px 0;'>Threshold</th>"
+            "<th style='text-align:left; padding:0 0 8px 0;'></th>"
+            "</tr>" + "".join(_rows) + "</table></div>"
+        )
+        self.lblScores.setVisible(bool(_rows))
+
+    def clear_screening_scores(self):
+        self.lblScores.setText("")
+        self.lblScores.setVisible(False)
 
 
 class PlutoGuidedAssessor(QtWidgets.QMainWindow):
@@ -419,10 +485,14 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
                 "font-size: 20pt; font-weight: 600; color: "
                 + ("rgb(0,120,0);" if _eligible else "rgb(170,0,0);")
             )
+            self.pageDone.show_screening_scores(
+                _stats, mechanisms_for_mode(self.data.mode)
+            )
         else:
             self.pageDone.lblDetail.setText(
                 f"{self.data.subjid} · {self.data.limb}"
             )
+            self.pageDone.clear_screening_scores()
         self._set_footer_hint("You can close the window.")
         self._kick_sync()
 

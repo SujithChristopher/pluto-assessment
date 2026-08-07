@@ -123,8 +123,11 @@ class PlutoAssessmentData(object):
         self._mode = setup["mode"]
         self._subjid = setup["subjid"]
         self._afflimb = setup["afflimb"]
-        # Screening screens the affected limb; limb == afflimb.
-        self._limb = setup["afflimb"] if self._mode == "screening" else setup["limb"]
+        # Both modes assess the affected limb, so the setup window sets "limb"
+        # to the affected side. Kept as its own field because it is what names
+        # the data folder and every raw/summary file; falling back to afflimb
+        # lets a caller omit it entirely.
+        self._limb = setup.get("limb") or setup["afflimb"]
         self._domlimb = setup.get("domlimb", "") or ""
         self._timepoint = setup.get("timepoint", "") or ""
 

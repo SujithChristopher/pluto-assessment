@@ -341,7 +341,7 @@ class PROM(BaseConstants):
 class APROM(BaseConstants):
     TORQUE_DIR1 = +1.0  # Toque to apply in direction 1
     TORQUE_DIR2 = -1.0  # Toque to apply in direction 2
-    NO_OF_TRIALS = 3  # Number of trials
+    NO_OF_TRIALS = 1  # Number of trials
     APROMTYPE = "Assisted"  # Single assisted-PROM type (slow/fast merged).
     # Torque is ramped from 0 to the target over RAMP_DURATION, then held at the
     # target for HOLD_DURATION. DURATION = RAMP_DURATION + HOLD_DURATION is the
