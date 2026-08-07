@@ -36,7 +36,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pandas as pd
 
 import plutofullassessdef as pfadef
-from newgui.sequencer import CALIB, Sequencer, Step
+from newgui.sequencer import ASSESSMENT_MECHANISMS, CALIB, Sequencer, Step
 from newgui.shell import PlutoGuidedAssessor
 
 
@@ -76,10 +76,10 @@ def _protocol_df(rows):
 def test_no_finished_rows_resumes_to_the_very_start():
     _df = _protocol_df(
         [
-            ("FPS", "AROM", None, "Incomplete"),
-            ("FPS", "PROM", None, "Incomplete"),
-            ("FPS", "APROM", None, "Incomplete"),
-            ("FPS", "DISC", None, "Incomplete"),
+            ("WURD", "AROM", None, "Incomplete"),
+            ("WURD", "PROM", None, "Incomplete"),
+            ("WURD", "APROM", None, "Incomplete"),
+            ("WURD", "DISC", None, "Incomplete"),
         ]
     )
     _pairs = _completed_pairs_from_df(_df)
@@ -89,7 +89,7 @@ def test_no_finished_rows_resumes_to_the_very_start():
     # _completed_pairs() is non-empty, so mirror that guard here too.
     if _pairs:
         seq.resume_from(_pairs)
-    assert seq.current() == Step("FPS", CALIB), seq.current()
+    assert seq.current() == Step("WURD", CALIB), seq.current()
 
 
 def test_mixed_statuses_all_count_as_finished():
@@ -98,25 +98,25 @@ def test_mixed_statuses_all_count_as_finished():
     session at all."""
     _df = _protocol_df(
         [
-            ("FPS", "AROM", "20260101_120000", "Complete"),
-            ("FPS", "PROM", "20260101_120000", "Skipped"),
-            ("FPS", "APROM", "20260101_120000", "Excluded"),
-            ("FPS", "DISC", None, "Incomplete"),
+            ("WURD", "AROM", "20260101_120000", "Complete"),
+            ("WURD", "PROM", "20260101_120000", "Skipped"),
+            ("WURD", "APROM", "20260101_120000", "Excluded"),
+            ("WURD", "DISC", None, "Incomplete"),
         ]
     )
     _pairs = _completed_pairs_from_df(_df)
     assert set(_pairs) == {
-        ("FPS", "AROM"),
-        ("FPS", "PROM"),
-        ("FPS", "APROM"),
+        ("WURD", "AROM"),
+        ("WURD", "PROM"),
+        ("WURD", "APROM"),
     }, _pairs
     seq = Sequencer("assessment")
     seq.resume_from(_pairs)
-    # Calibration is never persisted, so resume parks on FPS calibration first
+    # Calibration is never persisted, so resume parks on WURD calibration first
     # even though only DISC is left in the mechanism.
-    assert seq.current() == Step("FPS", CALIB), seq.current()
+    assert seq.current() == Step("WURD", CALIB), seq.current()
     seq.advance()
-    assert seq.current() == Step("FPS", "DISC"), seq.current()
+    assert seq.current() == Step("WURD", "DISC"), seq.current()
 
 
 def test_entirely_finished_protocol_resumes_past_the_end():
@@ -142,14 +142,16 @@ def test_unaffected_limb_protocol_walks_disc_only():
     )
     seq = Sequencer("assessment")
     seq.restrict_to(_protocol_pairs_from_df(_df))
+    # restrict_to filters the step list in place, so the flow keeps the
+    # assessment mechanism order regardless of the protocol CSV's row order.
     assert [(_s.mech, _s.task) for _s in seq.steps] == [
         _pair
-        for _m in pfadef.MECHANISMS
+        for _m in ASSESSMENT_MECHANISMS
         for _pair in ((_m, CALIB), (_m, "DISC"))
     ], seq.steps
-    assert seq.current() == Step(pfadef.MECHANISMS[0], CALIB), seq.current()
+    assert seq.current() == Step(ASSESSMENT_MECHANISMS[0], CALIB), seq.current()
     seq.advance()
-    assert seq.current() == Step(pfadef.MECHANISMS[0], "DISC"), seq.current()
+    assert seq.current() == Step(ASSESSMENT_MECHANISMS[0], "DISC"), seq.current()
 
 
 def test_restrict_then_resume_lands_on_first_unfinished_task():
@@ -157,15 +159,17 @@ def test_restrict_then_resume_lands_on_first_unfinished_task():
     compose."""
     _df = _protocol_df(
         [
-            ("FPS", "DISC", "20260101_120000", "Complete"),
+            ("FPS", "DISC", None, "Incomplete"),
             ("WFE", "DISC", None, "Incomplete"),
-            ("WURD", "DISC", None, "Incomplete"),
+            ("WURD", "DISC", "20260101_120000", "Complete"),
             ("HOC", "DISC", None, "Incomplete"),
         ]
     )
     seq = Sequencer("assessment")
     seq.restrict_to(_protocol_pairs_from_df(_df))
     seq.resume_from(_completed_pairs_from_df(_df))
+    # WURD is first in the assessment order and is done, so the flow resumes on
+    # the second mechanism.
     assert seq.current() == Step("WFE", CALIB), seq.current()
     seq.advance()
     assert seq.current() == Step("WFE", "DISC"), seq.current()

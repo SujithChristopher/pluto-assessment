@@ -18,6 +18,16 @@ CALIB = "CALIB"
 ASSESSMENT_TASKS = ["AROM", "PROM", "APROM", "DISC"]
 SCREENING_TASKS = ["AROM"]
 
+# Mechanism order differs by mode, by clinical request: screening works from the
+# hand outwards (HOC first), assessment works from the wrist inwards (WURD
+# first). Both are permutations of pfadef.MECHANISMS — the protocol CSV still
+# holds every mechanism, only the order they are walked in changes.
+SCREENING_MECHANISMS = ["HOC", "FPS", "WFE", "WURD"]
+ASSESSMENT_MECHANISMS = ["WURD", "WFE", "FPS", "HOC"]
+
+assert set(SCREENING_MECHANISMS) == set(pfadef.MECHANISMS), SCREENING_MECHANISMS
+assert set(ASSESSMENT_MECHANISMS) == set(pfadef.MECHANISMS), ASSESSMENT_MECHANISMS
+
 # Minimum AROM range for discrete reaching to be worth running.
 DISC_AROM_THRESHOLD = {"HOC": 2.0}      # cm
 DISC_AROM_THRESHOLD_DEFAULT = 10.0      # deg
@@ -41,10 +51,14 @@ def tasks_for_mode(mode: str) -> list[str]:
     return list(SCREENING_TASKS if mode == "screening" else ASSESSMENT_TASKS)
 
 
+def mechanisms_for_mode(mode: str) -> list[str]:
+    return list(SCREENING_MECHANISMS if mode == "screening" else ASSESSMENT_MECHANISMS)
+
+
 def build_steps(mode: str) -> list[Step]:
     """Every mechanism, calibration first, then its tasks in protocol order."""
     _steps = []
-    for _mech in pfadef.MECHANISMS:
+    for _mech in mechanisms_for_mode(mode):
         _steps.append(Step(_mech, CALIB))
         for _task in tasks_for_mode(mode):
             _steps.append(Step(_mech, _task))
