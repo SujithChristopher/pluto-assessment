@@ -67,5 +67,11 @@ class CSVBufferWriter(object):
             self._lastflush = time.time()
 
     def close(self):
+        # Idempotent: the normal end-of-task path closes the writer, and the
+        # window's closeEvent closes it again as a backstop. A second call must
+        # not raise, and must not try to flush into a closed handle.
+        if self._fhandle is None:
+            return
         self.flush()
         self._fhandle.close()
+        self._fhandle = None

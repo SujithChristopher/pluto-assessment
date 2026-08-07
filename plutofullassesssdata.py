@@ -521,14 +521,16 @@ class PlutoAssessmentProtocolData(object):
         """Set the mechanism task data in the summary file."""
         if self._df is None:
             raise ValueError("Summary data not initialized or index not set.")
-        # Check if all assessments are done.
-        if self._index is None:
-            return
-        # Set the session, rawfile and summaryfile in the summary data.
+        # The row is found by mechanism/task, not by self._index — a re-run of an
+        # already-recorded task has to overwrite its row. (This used to return
+        # early once every row had a session, silently discarding the write.)
         _updateindex = (self._df["mechanism"] == self._mech) & (
             self._df["task"] == self._task
         )
-        print(self._mech, self._task, _updateindex)
+        if not _updateindex.any():
+            raise ValueError(
+                f"No protocol row for mechanism [{self._mech}] task [{self._task}]"
+            )
         self._df.loc[_updateindex, "session"] = session
         self._df.loc[_updateindex, "rawfile"] = rawfile
         self._df.loc[_updateindex, "summaryfile"] = summaryfile
@@ -842,29 +844,26 @@ class PlutoAssessmentDetailsData(object):
         self.write_to_disk()
 
     def _update_mechanism_status(self):
+        # True -> every task finished cleanly, False -> at least one still open,
+        # None -> something was skipped or excluded, so the mechanism is only
+        # partially complete.
         _completed = True
         for task in self._val[self._mech]["tasks"]:
-            print(task)
             if len(self._val[self._mech]["tasks"][task]) == 0:
-                print("No entries")
                 _completed = False
                 break
-            print(self._val[self._mech]["tasks"][task][-1])
             if (
                 self._val[self._mech]["tasks"][task][-1]["status"] == "Rejected"
                 or self._val[self._mech]["tasks"][task][-1]["status"] == "Terminated"
             ):
-                print("Rejected or Terminated")
                 _completed = False
                 break
             if (
                 self._val[self._mech]["tasks"][task][-1]["status"] == "Skipped"
                 or self._val[self._mech]["tasks"][task][-1]["status"] == "Excluded"
             ):
-                print("Skipped or Excluded")
                 _completed = None
                 break
-        print(_completed)
         if _completed is True:
             self._val[self._mech]["status"] = "Complete"
         elif _completed is False:

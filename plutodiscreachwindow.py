@@ -235,6 +235,20 @@ class DiscreteReachData(object):
         self._summaryfilewriter.close()
         self._summaryfilewriter = None
 
+    def close_logging(self):
+        """Close both CSV writers, whatever state the task ended in.
+
+        terminate_*logging() only runs when every trial completed; a task ended
+        any other way would otherwise leave the raw writer holding up to a flush
+        interval of unwritten samples, and its file handle open. Idempotent."""
+        self._logstate = RawDataLoggingState.LOGGING_DONE
+        if self._rawfilewriter is not None:
+            self._rawfilewriter.close()
+            self._rawfilewriter = None
+        if self._summaryfilewriter is not None:
+            self._summaryfilewriter.close()
+            self._summaryfilewriter = None
+
 
 class PlutoAPRomAssessmentStateMachine:
     def __init__(self, plutodev, data: DiscreteReachData, dispctrls):
@@ -1112,6 +1126,11 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
             self._smachine.reset_statemachine()
 
     def closeEvent(self, event):
+        # Flush and close the CSV writers before anything else can return out of
+        # this method. It also parks the logging state, so device callbacks that
+        # still fire (the comment dialog below runs its own event loop) no longer
+        # try to write.
+        self.data.close_logging()
         if self._embedded:
             data = {
                 "done": self.data.all_trials_done,

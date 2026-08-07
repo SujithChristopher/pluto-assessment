@@ -472,9 +472,22 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         self._set_footer_hint("")
 
     def _discard_taskpage(self):
-        """Remove and destroy the current task widget."""
+        """Remove and destroy the current task widget.
+
+        Deleting a widget does not send it a closeEvent, so a page dropped from
+        here (Redo, or the window closing mid-task) never runs its own CSV
+        clean-up. Close the writers explicitly first: the raw writer buffers up
+        to a flush interval of samples, and those rows are lost if its handle is
+        collected unflushed. close_logging() is idempotent, so pages that
+        already closed themselves are unaffected. Calibration has no writers."""
         if self._taskpage is None:
             return
+        _data = getattr(self._taskpage, "data", None)
+        if hasattr(_data, "close_logging"):
+            try:
+                _data.close_logging()
+            except Exception as _exc:
+                errors.log_exception("Closing the task's CSV writers", _exc)
         self.stack.removeWidget(self._taskpage)
         self._taskpage.deleteLater()
         self._taskpage = None
@@ -537,6 +550,19 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         flow move on as though the trial had been saved."""
         _protocol = self.data.protocol
         try:
+            # Protocol first, details JSON second. The protocol write overwrites
+            # one row and is safe to repeat, while the details write appends a
+            # new attempt record and is not: with the old order, a protocol write
+            # that failed left the operator pressing Accept again and logging the
+            # same attempt twice in the JSON.
+            if write_protocol:
+                _protocol.update(
+                    session=self.data.session,
+                    rawfile=_protocol.rawfilename,
+                    summaryfile=_protocol.summaryfilename,
+                    taskcomment="",
+                    status=status,
+                )
             self.data.detailedsummary.update(
                 romval=payload.get("romval"),
                 session=self.data.session,
@@ -546,14 +572,6 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
                 taskcomment="",
                 status=status,
             )
-            if write_protocol:
-                _protocol.update(
-                    session=self.data.session,
-                    rawfile=_protocol.rawfilename,
-                    summaryfile=_protocol.summaryfilename,
-                    taskcomment="",
-                    status=status,
-                )
         except Exception as _exc:
             errors.log_exception(f"Saving {_protocol.mech}/{_protocol.task}", _exc)
             errors.show_error(
