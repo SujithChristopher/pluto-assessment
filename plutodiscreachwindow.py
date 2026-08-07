@@ -838,6 +838,17 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
             return (pfadef.AROM.MAXHOC - pos) if _is_left else pos
         return self._dispsign * pos
 
+    def _hoc_display_span(self):
+        """(low, high) x-limits for the HOC axis: the recorded AROM in display
+        coordinates, padded so the outer target is not flush against the edge.
+
+        A degenerate AROM (nothing recorded, or a flat range) would collapse the
+        axis to a point, so the padding never falls below a visible minimum."""
+        _ends = (self._xpos(self.data.arom[0]), self._xpos(self.data.arom[1]))
+        _lo, _hi = min(_ends), max(_ends)
+        _pad = max(0.08 * (_hi - _lo), 0.25)
+        return _lo - _pad, _hi + _pad
+
     #
     # Update UI
     #
@@ -959,8 +970,15 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
         _aromdisp.sort()
         _pgobj.setYRange(-30, 30)
         if self.data.mechanism == "HOC":
-            # Single corner-anchored axis 0..MAXHOC (matches AROM/PROM).
-            _pgobj.setXRange(-0.5, pfadef.AROM.MAXHOC + 0.5)
+            # Span what the subject can actually open to, not the device's full
+            # 9.4 cm aperture. Both targets are placed inside the recorded AROM
+            # (TGT1/TGT2_POSITION are fractions of it), so a 0..MAXHOC axis left
+            # the whole task crowded into the half of the view the subject's
+            # range happened to fall in. _xpos still pins the closed end to the
+            # corner that matches the hand being assessed, so the reach
+            # direction is unchanged — only the zoom is.
+            _lo, _hi = self._hoc_display_span()
+            _pgobj.setXRange(_lo, _hi)
         else:
             _pgobj.setXRange(_aromdisp[0], _aromdisp[1])
         _pgobj.getAxis("bottom").setStyle(showValues=False)
@@ -1014,9 +1032,9 @@ class PlutoDiscReachAssessWindow(QtWidgets.QMainWindow):
         _pgobj.addItem(self.ui.currPosLine1)
         _pgobj.addItem(self.ui.currPosLine2)
 
-        # Instruction text — centred on the axis (HOC axis spans 0..MAXHOC).
+        # Instruction text — centred on whatever the axis ended up spanning.
         _text_x = (
-            pfadef.AROM.MAXHOC / 2.0
+            sum(self._hoc_display_span()) / 2.0
             if self.data.mechanism == "HOC"
             else _aromdisp[0] + 0.5 * self.data.aromrange
         )

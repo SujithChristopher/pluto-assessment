@@ -1098,6 +1098,28 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             and self.data.romtype == pfadef.ROMType.PASSIVE
         )
 
+    @property
+    def _is_hoc_corner_anchored(self):
+        """HOC drawn on the corner-anchored 0..MAXHOC axis, rather than as the
+        legacy symmetric pair of lines about 0. Cycling AROM and open-only PROM
+        both use it.
+
+        The x-range and the cursor MUST agree on this. They did not: the cursor
+        was mapped through _xpos into 0..MAXHOC while the view still spanned the
+        symmetric [-10, 10], so the entire HOC PROM display sat in one half of
+        the plot. One property now answers the question for both."""
+        return self._is_hoc_cycling or self._is_hoc_prom
+
+    def _hoc_x_range(self):
+        """[low, high] x-limits for the HOC axis.
+
+        Corner-anchored displays span the whole 0..MAXHOC aperture, because
+        PROM is passive and may open the hand further than AROM did. The legacy
+        symmetric display keeps its own axis about 0."""
+        if self._is_hoc_corner_anchored:
+            return [-0.5, AROM.MAXHOC + 0.5]
+        return [-10, 10]
+
     def _xpos(self, pos):
         """Map a mechanism position to an x-coordinate for drawing.
 
@@ -1160,9 +1182,9 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         if self.data.mechanism == "HOC":
             if self.pluto.hocdisp is None:
                 return
-            if self._is_hoc_cycling or self._is_prom_centered or self._is_hoc_prom:
-                # Single corner-anchored cursor line (cycling AROM, centred PROM
-                # and open-only HOC PROM all use the 0..MAXHOC view).
+            if self._is_hoc_corner_anchored:
+                # Single corner-anchored cursor line on the same 0..MAXHOC view
+                # that _romassess_add_graph set up.
                 _x = self._xpos(self.pluto.hocdisp)
                 self.ui.currPosLine1.setData(
                     [_x, _x],
@@ -1509,13 +1531,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         self.ui.hocGraph.setLayout(_templayout)
         _pgobj.setYRange(-20, 20)
         if self.data.mechanism == "HOC":
-            # Corner-anchored axis 0..MAXHOC for cycling AROM and centred PROM;
-            # old symmetric axis about 0 for plain (no-AROM) HOC PROM/APROM.
-            _range = (
-                [-0.5, AROM.MAXHOC + 0.5]
-                if (self._is_hoc_cycling or self._is_prom_centered)
-                else [-10, 10]
-            )
+            _range = self._hoc_x_range()
         else:
             _range = pdef.get_range_for_mechanism(self.data.mechanism)
         _pgobj.setXRange(_range[0], _range[1])
