@@ -35,6 +35,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pandas as pd
 
+import debugconfig
+# This test walks the shipped assessment order, so it must not read whatever
+# debug override the developer currently has switched on in debugconfig.
+debugconfig.MECHANISM_ORDER = None
+
 import plutofullassessdef as pfadef
 from newgui.sequencer import ASSESSMENT_MECHANISMS, CALIB, Sequencer, Step
 from newgui.shell import PlutoGuidedAssessor

@@ -687,17 +687,64 @@ def assessment_protocol_path(subjid: str, limb: str, timepoint: str) -> pathlib.
     )
 
 
-def is_assessment_timepoint_completed(subjid: str, limb: str, timepoint: str) -> bool:
-    """True if the assessment protocol for this timepoint exists and has no
-    unfinished (NaN session) rows."""
-    _proto = assessment_protocol_path(subjid, limb, timepoint)
-    if not _proto.exists():
+def screening_protocol_path(subjid: str, limb: str) -> pathlib.Path:
+    """Path to the screening protocol CSV for a subject/limb."""
+    return pathlib.Path(
+        SCREENING_DIR, subjid, limb, f"{subjid}_{limb}_screening_protocol.csv"
+    )
+
+
+def assessment_details_path(subjid: str, limb: str, timepoint: str) -> pathlib.Path:
+    """Path to the assessment details JSON for a subject/limb/timepoint."""
+    return pathlib.Path(
+        DATA_DIR, subjid, limb, timepoint,
+        f"{subjid}_{limb}_{timepoint}_details.json",
+    )
+
+
+def screening_details_path(subjid: str, limb: str) -> pathlib.Path:
+    """Path to the screening details JSON for a subject/limb."""
+    return pathlib.Path(
+        SCREENING_DIR, subjid, limb, f"{subjid}_{limb}_screening_details.json"
+    )
+
+
+def details_path(subjid: str, limb: str, mode: str, timepoint: str = "") -> pathlib.Path:
+    """The details JSON for either mode, so callers do not have to branch."""
+    if mode == "screening":
+        return screening_details_path(subjid, limb)
+    return assessment_details_path(subjid, limb, timepoint)
+
+
+def _protocol_has_no_open_rows(path: pathlib.Path) -> bool:
+    """True if the protocol CSV exists and every row has a session recorded."""
+    if not path.exists():
         return False
     try:
         _df = pd.read_csv(
-            _proto.as_posix(), header=0, index_col=None,
+            path.as_posix(), header=0, index_col=None,
             dtype=SUMMARY_COLUMN_FORMAT,
         )
         return not _df["session"].isna().any()
     except Exception:
         return False
+
+
+def is_assessment_timepoint_completed(subjid: str, limb: str, timepoint: str) -> bool:
+    """True if the assessment protocol for this timepoint exists and has no
+    unfinished (NaN session) rows."""
+    return _protocol_has_no_open_rows(
+        assessment_protocol_path(subjid, limb, timepoint)
+    )
+
+
+def is_screening_completed(subjid: str, limb: str) -> bool:
+    """True if this subject/limb has already been screened to the end."""
+    return _protocol_has_no_open_rows(screening_protocol_path(subjid, limb))
+
+
+def is_session_completed(subjid: str, limb: str, mode: str, timepoint: str = "") -> bool:
+    """Completion check for either mode, so callers do not have to branch."""
+    if mode == "screening":
+        return is_screening_completed(subjid, limb)
+    return is_assessment_timepoint_completed(subjid, limb, timepoint)

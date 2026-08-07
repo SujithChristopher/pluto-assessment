@@ -657,6 +657,23 @@ class PlutoAssessmentDetailsData(object):
         self._mech = None
         self._task = None
 
+    @classmethod
+    def from_file(cls, filename):
+        """Read-only view of an existing details JSON, for showing the stats of
+        a session that is already finished.
+
+        Nothing is written: __init__ creates the file when it is missing, which
+        would plant an empty details JSON next to a completed session just for
+        looking at it, so the instance is built directly from the file instead.
+        Only the get_* readers are usable on the result — it has no basedir, so
+        write_to_disk() has nowhere to go."""
+        _obj = cls.__new__(cls)
+        with open(filename, "r") as fh:
+            _obj._val = json.load(fh)
+        _obj._mech = None
+        _obj._task = None
+        return _obj
+
     @property
     def mech(self):
         return self._mech

@@ -6,6 +6,11 @@ import sys
 # Make the repo root importable when run as `python tests/test_newgui_sequencer.py`.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
+import debugconfig
+# These tests pin the shipped mechanism order, so they must not read whatever
+# debug override the developer currently has switched on in debugconfig.
+debugconfig.MECHANISM_ORDER = None
+
 import plutofullassessdef as pfadef
 from newgui.sequencer import (
     ASSESSMENT_MECHANISMS,

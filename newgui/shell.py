@@ -11,7 +11,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 import plutofullassessdef as pfadef
 from async_workers import SessionSetupWorker
 from myqt import load_mech_pixmap
-from plutofullassesssdata import PlutoAssessmentData
+from plutofullassesssdata import PlutoAssessmentData, PlutoAssessmentDetailsData
 from qtpluto import QtPluto
 from s3sync import S3SyncWorker, load_s3_config
 
@@ -298,6 +298,7 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         self._setup_worker = None
         self._taskpage = None
         self._resumed = False
+        self._viewonly = False
         self._lastpayload = {}
 
         self._build_ui()
@@ -337,7 +338,10 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         self.stack = QtWidgets.QStackedWidget()
         _outer.addWidget(self.stack, 1)
 
-        self.pageSetup = EmbeddedSetupPage(onstartcb=self._on_setup_start)
+        self.pageSetup = EmbeddedSetupPage(
+            onstartcb=self._on_setup_start,
+            onviewstatscb=self._on_view_completed,
+        )
         self.pageReady = ReadyPage()
         self.pageDone = DonePage()
         for _p in (self.pageSetup, self.pageReady, self.pageDone):
@@ -551,15 +555,31 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         self._kick_sync()
 
     def _show_done(self):
-        self.stack.setCurrentWidget(self.pageDone)
+        self._render_done(
+            mode=self.data.mode,
+            subjid=self.data.subjid,
+            limb=self.data.limb,
+            timepoint=self.data.timepoint,
+            details=self.data.detailedsummary,
+        )
         self.lblHeader.setText("Done")
+        self._set_footer_hint("You can close the window.")
+        self._kick_sync()
+
+    def _render_done(self, mode, subjid, limb, timepoint, details):
+        """Draw the end-of-session readout from a details object.
+
+        Takes its inputs rather than reading self.data, so the same page can
+        show a session that just finished and one that finished weeks ago and is
+        only being looked at."""
+        self.stack.setCurrentWidget(self.pageDone)
         self.lblCounter.setText("")
-        _order = mechanisms_for_mode(self.data.mode)
-        if self.data.detailedsummary is None:
-            self.pageDone.lblDetail.setText(f"{self.data.subjid} · {self.data.limb}")
+        _order = mechanisms_for_mode(mode)
+        if details is None:
+            self.pageDone.lblDetail.setText(f"{subjid} · {limb}")
             self.pageDone.clear_scores()
-        elif self.data.is_screening:
-            _eligible, _stats = self.data.detailedsummary.get_screening_eligibility()
+        elif mode == "screening":
+            _eligible, _stats = details.get_screening_eligibility()
             self.pageDone.lblDetail.setText(
                 "ELIGIBLE" if _eligible else "NOT ELIGIBLE"
             )
@@ -570,17 +590,65 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
             self.pageDone.show_screening_scores(_stats, _order)
         else:
             # Assessment states the facts of the session, not a verdict.
-            self.pageDone.lblDetail.setText(
-                f"{self.data.subjid} · {self.data.limb} · {self.data.timepoint}"
-            )
+            self.pageDone.lblDetail.setText(f"{subjid} · {limb} · {timepoint}")
             self.pageDone.lblDetail.setStyleSheet(
                 "font-size: 17pt; color: #3c4043;"
             )
             self.pageDone.show_assessment_scores(
-                self.data.detailedsummary.get_arom_summary(), _order
+                details.get_arom_summary(), _order
             )
-        self._set_footer_hint("You can close the window.")
-        self._kick_sync()
+
+    def _on_view_completed(self, info):
+        """Open a finished session's recorded stats, read-only.
+
+        No session folder, no protocol, no device work — the details JSON on
+        disk is read and drawn. Nothing can be recorded from here: the flow has
+        no sequencer, so the PLUTO button only returns to setup."""
+        _path = pfadef.details_path(
+            info["subjid"], info["limb"], info["mode"], info["timepoint"]
+        )
+        _what = (
+            "Screening" if info["mode"] == "screening" else info["timepoint"]
+        )
+        try:
+            _details = PlutoAssessmentDetailsData.from_file(_path.as_posix())
+        except Exception as _exc:
+            # The protocol says finished but the details are unreadable; say so
+            # rather than showing an empty table as though nothing was recorded.
+            errors.log_exception(f"Reading {_path}", _exc)
+            errors.show_error(
+                "Cannot show the recorded stats",
+                f"{_what} is complete for {info['subjid']} / {info['limb']}, "
+                f"but its results file could not be read.\n\n"
+                f"{type(_exc).__name__}: {_exc}",
+                detail=_path.as_posix(),
+            )
+            return
+        self._viewonly = True
+        self.seq = None
+        self._render_done(
+            mode=info["mode"],
+            subjid=info["subjid"],
+            limb=info["limb"],
+            timepoint=info["timepoint"],
+            details=_details,
+        )
+        self.pageDone.lblTitle.setText(f"{_what} already completed")
+        self.lblHeader.setText("Completed session — view only")
+        self._set_footer_hint(
+            "Viewing recorded results. Press the PLUTO button to go back to setup."
+        )
+
+    def _back_to_setup(self):
+        """Leave the read-only view. Nothing was started, so there is nothing to
+        tear down."""
+        self._viewonly = False
+        self.pageDone.lblTitle.setText("Session complete")
+        self.pageDone.clear_scores()
+        self.stack.setCurrentWidget(self.pageSetup)
+        self.lblHeader.setText("Session setup")
+        self.lblCounter.setText("")
+        self._set_footer_hint("Fill in the session details, then press Start.")
 
     def _update_header(self):
         _step = self.seq.current()
@@ -778,6 +846,9 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         # Navigation only while a task page is not running; task pages attach
         # their own handler and own the button while live.
         if self._taskpage is not None:
+            return
+        if self._viewonly and self.stack.currentWidget() is self.pageDone:
+            self._back_to_setup()
             return
         if self.stack.currentWidget() is self.pageReady:
             self._start_current_step()

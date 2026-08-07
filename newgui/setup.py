@@ -48,13 +48,18 @@ QWidget#setupCard QLabel {
 
 class EmbeddedSetupPage(SessionSetupWindow):
     """SessionSetupWindow as a page widget. Calls onstartcb(setupdict) when the
-    operator presses Start; the dict is the same one the old GUI receives."""
+    operator presses Start; the dict is the same one the old GUI receives.
 
-    def __init__(self, onstartcb, parent=None):
+    If the selected session is already finished there is nothing to start, so
+    onviewstatscb is called instead with {mode, subjid, limb, timepoint} and the
+    shell shows what was recorded."""
+
+    def __init__(self, onstartcb, onviewstatscb=None, parent=None):
         # modal=False and no close callback: the guided shell reacts to Start
         # directly rather than to the window closing.
         super().__init__(parent=parent, modal=False, onclosecb=None)
         self._onstartcb = onstartcb
+        self._onviewstatscb = onviewstatscb
         # Suppress the one-shot centring in showEvent — meaningless (and
         # disruptive) for a widget inside a layout.
         self._centered = True
@@ -124,6 +129,13 @@ class EmbeddedSetupPage(SessionSetupWindow):
         # _build_card has not run yet during the base class's __init__.
         if hasattr(self, "_hintrow"):
             self._set_hint_visible(self.lblExisting.text() != "")
+
+    def _on_already_completed(self, info):
+        """Show the recorded stats instead of the base class's dialog. Falls
+        back to the dialog if the shell did not supply a viewer."""
+        if self._onviewstatscb is None:
+            return super()._on_already_completed(info)
+        self._onviewstatscb(dict(info))
 
     def _on_start(self):
         # This page instance is long-lived: after a failed session setup the

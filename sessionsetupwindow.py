@@ -232,6 +232,18 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
                 and self.cbTP.currentText() != ""
         self.pbStart.setEnabled(ok)
 
+    def _on_already_completed(self, info: dict):
+        """The selected session is already finished, so Start does nothing.
+
+        Default: say so. The guided GUI overrides this to open the recorded
+        stats read-only instead, which is more use than a dialog telling the
+        operator something they cannot then look at."""
+        _what = info["timepoint"] if info["mode"] != "screening" else "Screening"
+        QtWidgets.QMessageBox.warning(
+            self, "Already Completed",
+            f"{_what} is already complete for {info['subjid']} / {info['limb']}.",
+        )
+
     def _on_start(self):
         subjid = self.txtSubjID.currentText().strip().lower()
         afflimb = self.cbAff.currentText().lower()
@@ -252,15 +264,19 @@ class SessionSetupWindow(QtWidgets.QMainWindow):
                         f"Cannot select {timepoint}: {prev} is not complete for this limb.",
                     )
                     return
-            if pfadef.is_assessment_timepoint_completed(subjid, limb, timepoint):
-                QtWidgets.QMessageBox.warning(
-                    self, "Already Completed",
-                    f"{timepoint} is already complete for {subjid} / {limb}.",
-                )
-                return
         else:
             domlimb = ""
             timepoint = ""
+
+        # Already finished — in either mode. There is nothing left to record, so
+        # the session is not started; what happens instead is the subclass's
+        # call (the guided GUI shows the recorded stats).
+        if pfadef.is_session_completed(subjid, limb, mode, timepoint):
+            self._on_already_completed(
+                {"mode": mode, "subjid": subjid, "limb": limb,
+                 "timepoint": timepoint}
+            )
+            return
 
         # Create the subject record if new.
         listfile = _list_file(mode)
