@@ -180,11 +180,15 @@ class DonePage(QtWidgets.QWidget):
     #
     @staticmethod
     def _arom_cell(entry):
-        """The measured range, or why there is no number. Returns (text, colour)."""
+        """The measured range, or why there is no number. Returns (text, colour).
+
+        "not satisfied" is the same wording the assessor accepted in the window
+        when the trial time limit ran out, so the session report and the moment
+        it describes use one term."""
         if entry["outcome"] == "complete":
             return f"{entry['value']:.1f} {entry['unit']}", None
         if entry["outcome"] == "failed":
-            return "failed", SCORE_FAILED
+            return "not satisfied", SCORE_FAILED
         return "—", SCORE_NONE
 
     @staticmethod

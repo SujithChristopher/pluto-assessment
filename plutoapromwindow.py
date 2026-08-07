@@ -1903,27 +1903,33 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
                 return
             # Real trial — let the assessor redo it or move on. When this
             # failure hits MAX_FAILED_TRIALS there is no next trial: moving on
-            # terminates AROM and disables discrete reaching. Label the button
-            # for what it actually does.
+            # ends AROM and disables discrete reaching.
             _terminates = (self._failed_trials + 1) >= AROM.MAX_FAILED_TRIALS
+            _limit = int(AROM.TRIAL_TIME_LIMIT)
             box = QtWidgets.QMessageBox(self)
             box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
-            box.setWindowTitle("Trial not completed")
-            box.setText(
-                "Trial not completed within the time limit.\n"
-                + (
-                    "Redo this trial, or skip AROM?\n"
-                    "Skipping terminates AROM and disables discrete reaching "
-                    "for this mechanism."
-                    if _terminates
-                    else "Redo this trial, or move on to the next one?"
+            if _terminates:
+                # Not a "skip": nothing is being passed over, the subject simply
+                # did not meet the AROM criterion. Say that, and say what it
+                # costs, so the assessor is accepting a stated outcome rather
+                # than choosing to skip a task.
+                box.setWindowTitle("AROM not satisfied")
+                box.setText(
+                    f"AROM was not completed within {_limit}s.\n\n"
+                    "AROM is not satisfied — discrete reaching will be "
+                    "disabled for this mechanism."
                 )
-            )
+            else:
+                box.setWindowTitle("Trial not completed")
+                box.setText(
+                    f"Trial not completed within {_limit}s.\n\n"
+                    "Redo this trial, or move on to the next one?"
+                )
             _redo = box.addButton(
                 "Redo Trial", QtWidgets.QMessageBox.ButtonRole.ActionRole
             )
             _next = box.addButton(
-                "Skip AROM" if _terminates else "Next Trial",
+                "Accept" if _terminates else "Next Trial",
                 QtWidgets.QMessageBox.ButtonRole.AcceptRole,
             )
             box.setDefaultButton(_redo if _terminates else _next)
@@ -1940,7 +1946,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.update_ui()
         finally:
             self._attach_pluto_callbacks()
-        # Too many failures — terminate AROM (skip path disables DISC).
+        # Out of trials — AROM is not satisfied, which disables DISC downstream.
         if self._failed_trials >= AROM.MAX_FAILED_TRIALS:
             self._arom_skipped = True
             self.close()
@@ -1954,16 +1960,19 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         # still fire (the comment dialog below runs its own event loop) no longer
         # try to write.
         self.data.close_logging()
-        # AROM terminated (too many failed trials) — bypass normal dialogs.
+        # AROM not satisfied (ran out of trials against the time limit) — bypass
+        # the normal dialogs. The reason logged here is the one that lands in
+        # the protocol CSV's taskcomment, so it matches what the assessor was
+        # shown before they accepted it.
         if self._arom_skipped:
             data = {
                 "romval": self.data.rom,
                 "done": False,
                 "status": pfadef.AssessStatus.SKIPPED.value,
                 "taskcomment": (
-                    f"Patient unable to perform {self._failed_trials} trials "
-                    f"within {int(AROM.TRIAL_TIME_LIMIT)}s; AROM terminated, "
-                    f"discrete reaching disabled."
+                    f"AROM not satisfied: not completed within "
+                    f"{int(AROM.TRIAL_TIME_LIMIT)}s over {self._failed_trials} "
+                    f"attempt(s); discrete reaching disabled."
                 ),
             }
             if self.on_close_callback:

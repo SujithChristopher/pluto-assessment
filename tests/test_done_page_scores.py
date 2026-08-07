@@ -75,26 +75,27 @@ def test_values_units_and_thresholds_are_rendered():
     assert "&ge; 2 cm" in _html, _html
 
 
-def test_a_timed_out_mechanism_reads_as_failed_not_as_untested():
+def test_a_timed_out_mechanism_reads_as_not_satisfied_not_as_untested():
     """A subject who could not finish AROM inside the time limit must not be
-    reported the same way as a mechanism that was never run."""
+    reported the same way as a mechanism that was never run. The wording matches
+    the "AROM not satisfied" dialog the assessor accepted at the time."""
     _p = DonePage()
     _p.show_screening_scores(_stats(FPS="failed", HOC=None), SCREENING_MECHANISMS)
     _html = _p.lblScores.text()
-    assert "failed" in _html, _html
+    assert "not satisfied" in _html, _html
     assert "not completed in time" in _html, _html
     assert "not attempted" in _html, _html
     assert "—" in _html, _html
 
 
-def test_below_threshold_is_distinct_from_failed():
+def test_below_threshold_is_distinct_from_not_satisfied():
     """A measured-but-low AROM is a real number and must still be shown."""
     _p = DonePage()
     _p.show_screening_scores(_stats(FPS=4.0), SCREENING_MECHANISMS)
     _html = _p.lblScores.text()
     assert "4.0 deg" in _html, _html
     assert "below threshold" in _html, _html
-    assert "failed" not in _html, _html
+    assert "not satisfied" not in _html, _html
 
 
 def test_table_agrees_with_the_verdict():
@@ -133,12 +134,12 @@ def test_assessment_reads_in_assessment_order():
     assert _pos == sorted(_pos), (ASSESSMENT_MECHANISMS, _pos)
 
 
-def test_assessment_still_distinguishes_failed_from_untested():
+def test_assessment_still_distinguishes_not_satisfied_from_untested():
     _p = DonePage()
     _p.show_assessment_scores(_summary(WURD="failed", HOC=None),
                               ASSESSMENT_MECHANISMS)
     _html = _p.lblScores.text()
-    assert "failed" in _html, _html
+    assert "not satisfied" in _html, _html
     assert "—" in _html, _html
 
 
