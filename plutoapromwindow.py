@@ -29,6 +29,17 @@ from myqt import CommentDialog
 import misc
 
 
+# Per-trial countdown colours, on the plot's dark background. The urgency
+# thresholds are fractions of AROM.TRIAL_TIME_LIMIT.
+CD_COLORS = {
+    "ok": "#00E676",     # plenty of time
+    "warn": "#FFC107",   # under a third left
+    "crit": "#FF5252",   # last 10 seconds
+}
+CD_WARN_FRACTION = 1.0 / 3.0
+CD_CRIT_SECONDS = 10.0
+
+
 class RawDataLoggingState(Enum):
     WAIT_FOR_LOG = 0
     LOG_DATA = 1
@@ -1022,10 +1033,9 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         self._trial_active = False
         self._trial_secs_left = AROM.TRIAL_TIME_LIMIT
         if self._is_arom:
-            self.ui.lblCountdown = QtWidgets.QLabel("")
-            self.ui.lblCountdown.setStyleSheet("color: rgb(0, 170, 0);")
-            self.ui.lblCountdown.setFont(QtGui.QFont("Cascadia Mono Light", 16))
-            self.ui.horizontalLayout.addWidget(self.ui.lblCountdown)
+            # The clock is drawn inside the plot (see _render_countdown), above
+            # the cycling instruction, rather than on the top bar where it sat
+            # away from everything else the operator is watching.
             self._trialtimer = QTimer()
             self._trialtimer.timeout.connect(self._trial_timer_tick)
             self._trialtimer.start(1000)
@@ -1620,6 +1630,31 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.ui.dirIndicator.setFont(QtGui.QFont("Cascadia Mono Light", 20))
             self.ui.dirIndicator.setVisible(False)
             _pgobj.addItem(self.ui.dirIndicator)
+            # Per-trial countdown, sitting directly above the cycling
+            # instruction (y = 15) so the clock and "keep cycling" line are read
+            # in one glance: a big seconds readout over a depleting bar.
+            _cx = (_range[0] + _range[1]) / 2.0
+            self._cd_halfwidth = 0.22 * (_range[1] - _range[0])
+            self._cd_centre = _cx
+            self.ui.countdownText = pg.TextItem(
+                text="", color=CD_COLORS["ok"], anchor=(0.5, 0.5)
+            )
+            self.ui.countdownText.setPos(_cx, 18.7)
+            self.ui.countdownText.setFont(QtGui.QFont("Cascadia Mono Light", 20))
+            self.ui.countdownText.setZValue(9)
+            self.ui.countdownText.setVisible(False)
+            _pgobj.addItem(self.ui.countdownText)
+            self.ui.countdownTrack = QGraphicsRectItem()
+            self.ui.countdownTrack.setBrush(QColor(255, 255, 255, 40))
+            self.ui.countdownTrack.setPen(pg.mkPen(None))
+            self.ui.countdownTrack.setZValue(8)
+            self.ui.countdownTrack.setVisible(False)
+            _pgobj.addItem(self.ui.countdownTrack)
+            self.ui.countdownBar = QGraphicsRectItem()
+            self.ui.countdownBar.setPen(pg.mkPen(None))
+            self.ui.countdownBar.setZValue(9)
+            self.ui.countdownBar.setVisible(False)
+            _pgobj.addItem(self.ui.countdownBar)
             # Unused (removed ghost/extension visuals)
             self.ui.ghostLeftLine = None
             self.ui.ghostRightLine = None
@@ -1641,6 +1676,9 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
             self.ui.extFillRight = None
             self.ui.dirIndicator = None
             self.ui.cycleListText = None
+            self.ui.countdownText = None
+            self.ui.countdownTrack = None
+            self.ui.countdownBar = None
             self.ui.cycleLeftLines = []
             self.ui.cycleRightLines = []
             # Centred PROM shows a persistent resting (centre) line + band;
@@ -1782,21 +1820,54 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         if _in_trial and not self._trial_active:
             self._trial_active = True
             self._trial_secs_left = AROM.TRIAL_TIME_LIMIT
+            # Show the full clock the moment the trial starts rather than
+            # waiting up to a second for the first tick.
+            self._render_countdown()
         elif not _in_trial and self._trial_active:
             self._trial_active = False
+            self._render_countdown()
+
+    def _render_countdown(self):
+        """Draw the countdown above the instruction line: seconds remaining over
+        a bar that depletes left to right, green -> amber -> red."""
+        if self.ui.countdownText is None:
+            return
+        _items = (
+            self.ui.countdownText, self.ui.countdownTrack, self.ui.countdownBar
+        )
+        if not self._trial_active:
+            for _it in _items:
+                _it.setVisible(False)
+            return
+
+        _left = max(0.0, self._trial_secs_left)
+        _frac = min(1.0, _left / AROM.TRIAL_TIME_LIMIT)
+        if _left <= CD_CRIT_SECONDS:
+            _color = CD_COLORS["crit"]
+        elif _frac <= CD_WARN_FRACTION:
+            _color = CD_COLORS["warn"]
+        else:
+            _color = CD_COLORS["ok"]
+
+        _mins, _secs = divmod(int(_left), 60)
+        self.ui.countdownText.setText(f"{_mins}:{_secs:02d} left")
+        self.ui.countdownText.setColor(_color)
+        # Track first (full width, dim), then the remaining time on top of it.
+        _x0 = self._cd_centre - self._cd_halfwidth
+        _w = 2 * self._cd_halfwidth
+        self.ui.countdownTrack.setRect(_x0, 16.6, _w, 0.9)
+        self.ui.countdownBar.setRect(_x0, 16.6, _w * _frac, 0.9)
+        self.ui.countdownBar.setBrush(QColor(_color))
+        for _it in _items:
+            _it.setVisible(True)
 
     def _trial_timer_tick(self):
         """Tick once per second; count down only while a trial is active."""
         if not self._trial_active:
-            self.ui.lblCountdown.setText("")
+            self._render_countdown()
             return
         self._trial_secs_left -= 1
-        self.ui.lblCountdown.setText(f"{int(self._trial_secs_left)}s")
-        self.ui.lblCountdown.setStyleSheet(
-            "color: rgb(200, 0, 0);"
-            if self._trial_secs_left <= 10
-            else "color: rgb(0, 170, 0);"
-        )
+        self._render_countdown()
         if self._trial_secs_left <= 0:
             self._handle_trial_timeout()
 
@@ -1809,7 +1880,7 @@ class PlutoAPRomAssessWindow(QtWidgets.QMainWindow):
         Device callbacks are detached while the modal is open so streaming data
         cannot finish or restart the trial underneath the dialog."""
         self._trial_active = False
-        self.ui.lblCountdown.setText("")
+        self._render_countdown()
         self._detach_pluto_callbacks()
         try:
             # Demo / trial-run: don't penalise, just restart the demo trial.

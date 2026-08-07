@@ -10,6 +10,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 import plutofullassessdef as pfadef
 from async_workers import SessionSetupWorker
+from myqt import load_mech_pixmap
 from plutofullassesssdata import PlutoAssessmentData
 from qtpluto import QtPluto
 from s3sync import S3SyncWorker, load_s3_config
@@ -38,6 +39,42 @@ TASK_INSTRUCTIONS = {
 
 STEP_LABELS = dict(pfadef.TASK_LABELS)
 STEP_LABELS[CALIB] = "Calibration"
+
+# Post-trial review panel. Accept is the affirmative action (green), Redo the
+# neutral one — the pair must not read as "primary vs cancel", since redoing a
+# bad trial is just as normal an outcome as keeping a good one.
+REVIEW_BOX_QSS = """
+QWidget#reviewBox {
+    background-color: #ffffff;
+    border: 1px solid #e3e7ec;
+    border-radius: 14px;
+}
+QLabel#reviewPrompt {
+    font-size: 13pt;
+    font-weight: 600;
+    color: #3c4043;
+    background: transparent;
+}
+QPushButton#btnAccept, QPushButton#btnRedo {
+    font-size: 13pt;
+    font-weight: 600;
+    border-radius: 8px;
+}
+QPushButton#btnAccept {
+    background-color: #0a7d00;
+    color: #ffffff;
+    border: 1px solid #0a6b00;
+}
+QPushButton#btnAccept:hover   { background-color: #0a6b00; }
+QPushButton#btnAccept:pressed { background-color: #085a00; }
+QPushButton#btnRedo {
+    background-color: #ffffff;
+    color: #b45309;
+    border: 1px solid #e0b070;
+}
+QPushButton#btnRedo:hover   { background-color: #fff7ec; border-color: #d09a4e; }
+QPushButton#btnRedo:pressed { background-color: #fdeed7; }
+"""
 
 
 class ReadyPage(QtWidgets.QWidget):
@@ -75,7 +112,7 @@ class ReadyPage(QtWidgets.QWidget):
         self.lblHow.setText(TASK_INSTRUCTIONS[step.task].format(mech=step.mech))
         _img = pathlib.Path(__file__).resolve().parent.parent / "assets" / MECH_IMAGES[step.mech]
         if step.is_calib and _img.exists():
-            _pix = QtGui.QPixmap(_img.as_posix())
+            _pix = load_mech_pixmap(_img)
             self.lblImage.setPixmap(
                 _pix.scaledToHeight(320, QtCore.Qt.TransformationMode.SmoothTransformation)
             )
@@ -166,36 +203,72 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
         for _p in (self.pageSetup, self.pageReady, self.pageDone):
             self.stack.addWidget(_p)
 
-        # Footer: hint line or Accept/Redo.
+        # Footer: hint line, or the review box with Accept / Redo.
         _foot = QtWidgets.QHBoxLayout()
         _foot.setContentsMargins(18, 10, 18, 14)
         self.lblHint = QtWidgets.QLabel("")
         self.lblHint.setStyleSheet("font-size: 13pt; color: #6b7280;")
-        self.pbAccept = QtWidgets.QPushButton("Accept")
-        self.pbAccept.setObjectName("btnPrimary")
-        self.pbAccept.setMinimumSize(140, 40)
-        self.pbRedo = QtWidgets.QPushButton("Redo")
-        self.pbRedo.setMinimumSize(140, 40)
+        self.reviewBox = self._build_review_box()
+        # The hint and the review box are never shown together, so the pair of
+        # stretches centres whichever one is visible: the box lands in the
+        # middle of the footer, the hint keeps its left margin.
         _foot.addWidget(self.lblHint)
         _foot.addStretch(1)
-        _foot.addWidget(self.pbRedo)
-        _foot.addWidget(self.pbAccept)
+        _foot.addWidget(self.reviewBox)
+        _foot.addStretch(1)
         _outer.addLayout(_foot)
         self._set_footer_hint("")
 
         self.pbAccept.clicked.connect(self._on_accept)
         self.pbRedo.clicked.connect(self._on_redo)
 
+    def _build_review_box(self):
+        """The decision the operator makes after every trial, in one panel:
+        a prompt and the two actions, so it reads as a question rather than as
+        two loose buttons on a toolbar."""
+        _box = QtWidgets.QWidget()
+        _box.setObjectName("reviewBox")
+        # A plain QWidget ignores stylesheet backgrounds/borders without this.
+        _box.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
+        _box.setStyleSheet(REVIEW_BOX_QSS)
+        _lay = QtWidgets.QVBoxLayout(_box)
+        _lay.setContentsMargins(28, 14, 28, 18)
+        _lay.setSpacing(10)
+
+        self.lblReview = QtWidgets.QLabel("Keep this trial?")
+        self.lblReview.setObjectName("reviewPrompt")
+        self.lblReview.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        _lay.addWidget(self.lblReview)
+
+        self.pbAccept = QtWidgets.QPushButton("Accept")
+        self.pbAccept.setObjectName("btnAccept")
+        self.pbAccept.setMinimumSize(180, 48)
+        self.pbAccept.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.pbRedo = QtWidgets.QPushButton("Redo")
+        self.pbRedo.setObjectName("btnRedo")
+        self.pbRedo.setMinimumSize(180, 48)
+        self.pbRedo.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        _btns = QtWidgets.QHBoxLayout()
+        _btns.setSpacing(16)
+        _btns.addWidget(self.pbRedo)
+        _btns.addWidget(self.pbAccept)
+        _lay.addLayout(_btns)
+
+        _shadow = QtWidgets.QGraphicsDropShadowEffect(self)
+        _shadow.setBlurRadius(24)
+        _shadow.setOffset(0, 4)
+        _shadow.setColor(QtGui.QColor(15, 23, 42, 36))
+        _box.setGraphicsEffect(_shadow)
+        return _box
+
     def _set_footer_hint(self, text: str):
         self.lblHint.setText(text)
         self.lblHint.setVisible(True)
-        self.pbAccept.setVisible(False)
-        self.pbRedo.setVisible(False)
+        self.reviewBox.setVisible(False)
 
     def _set_footer_review(self):
         self.lblHint.setVisible(False)
-        self.pbAccept.setVisible(True)
-        self.pbRedo.setVisible(True)
+        self.reviewBox.setVisible(True)
 
     #
     # Timers, status bar, sync

@@ -171,7 +171,12 @@ QRadioButton::indicator:unchecked {
     border-radius: 9px;
     background: #ffffff;
 }
+/* The checked indicator keeps the same 18px outer box as the unchecked one
+   (8px content + 2x5px border), so border-radius: 9px still draws a circle.
+   Leaving it at 16px content makes a 26px box that renders as a blue square. */
 QRadioButton::indicator:checked {
+    width: 8px;
+    height: 8px;
     border: 5px solid #2563eb;
     border-radius: 9px;
     background: #ffffff;

@@ -128,6 +128,27 @@ class CommentDialog(QDialog):
             super().reject()
 
 
+def load_mech_pixmap(img_path, invert=True):
+    """Load a mechanism artwork PNG.
+
+    The artwork is white line-art on transparency — drawn for a dark UI and
+    invisible on the light theme. invert flips the colour channels only, so
+    white becomes black and the transparent background (including the soft
+    alpha at antialiased edges) is left exactly as it is.
+
+    Returns a null QPixmap if the file is missing, matching QPixmap(path).
+    """
+    _img = QtGui.QImage(str(img_path))
+    if _img.isNull():
+        return QtGui.QPixmap()
+    if invert:
+        # Non-premultiplied ARGB32: InvertRgb must not touch alpha, and in a
+        # premultiplied format the channels are not separable.
+        _img = _img.convertToFormat(QtGui.QImage.Format.Format_ARGB32)
+        _img.invertPixels(QtGui.QImage.InvertMode.InvertRgb)
+    return QtGui.QPixmap.fromImage(_img)
+
+
 class MechStartDialog(QDialog):
     """Confirm dialog shown before starting a mechanism assessment.
     Displays the mechanism image above the confirmation text."""
@@ -145,7 +166,7 @@ class MechStartDialog(QDialog):
         # Image
         self._img_label = QLabel(self)
         self._img_label.setAlignment(QtCore.Qt.AlignCenter)
-        pixmap = QtGui.QPixmap(str(img_path))
+        pixmap = load_mech_pixmap(img_path)
         if not pixmap.isNull():
             self._img_label.setPixmap(
                 pixmap.scaled(200, 200, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
