@@ -390,9 +390,22 @@ class PlutoAssessmentProtocolData(object):
         else:
             self._index = None
 
-    def set_mechanism(self, mechname):
+    def set_mechanism(self, mechname, enforce_order=True):
+        """Select the mechanism to record against.
+
+        enforce_order gates the choice on the protocol CSV's row order. That
+        gate exists for the old GUI, where the operator picks mechanisms by
+        hand and must not jump ahead. The guided GUI owns its own sequencing
+        (newgui.sequencer) and deliberately walks a different order from the
+        row order — assessment starts at the wrist, the rows start at FPS — so
+        it passes False. The mechanism still has to exist in the protocol.
+        """
+        if mechname not in set(self._df["mechanism"]):
+            raise ValueError(
+                f"Mechanism [{mechname}] is not in this protocol"
+            )
         # Sanity check. Allow selecting any mechanism that is already enabled.
-        if mechname not in self.mech_enabled:
+        if enforce_order and mechname not in self.mech_enabled:
             # If it's not in mech_enabled, check if it's the very next one in the protocol.
             if (
                 self._index is not None

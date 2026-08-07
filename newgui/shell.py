@@ -4,6 +4,7 @@ One QMainWindow, one QStackedWidget. The PLUTO hardware button advances the
 flow; the mouse is used only for setup, Accept and Redo."""
 
 import pathlib
+import sys
 import time
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -35,6 +36,18 @@ MECH_IMAGES = {
     "WURD": "wfe.png",
     "HOC": "hoc.png",
 }
+
+
+def assets_dir() -> pathlib.Path:
+    """Where the mechanism artwork lives.
+
+    A PyInstaller build unpacks bundled data under sys._MEIPASS, which is not
+    the same place __file__ points to, so that is checked first and the source
+    tree is the fallback for a normal `uv run` launch."""
+    _bundled = getattr(sys, "_MEIPASS", None)
+    if _bundled:
+        return pathlib.Path(_bundled) / "assets"
+    return pathlib.Path(__file__).resolve().parent.parent / "assets"
 
 TASK_INSTRUCTIONS = {
     CALIB: "Fit the {mech} mechanism, then press the PLUTO button to calibrate.",
@@ -117,7 +130,7 @@ class ReadyPage(QtWidgets.QWidget):
             f"{_mechlabel} — {_label}" + ("  (resumed)" if resumed else "")
         )
         self.lblHow.setText(TASK_INSTRUCTIONS[step.task].format(mech=step.mech))
-        _img = pathlib.Path(__file__).resolve().parent.parent / "assets" / MECH_IMAGES[step.mech]
+        _img = assets_dir() / MECH_IMAGES[step.mech]
         if step.is_calib and _img.exists():
             _pix = load_mech_pixmap(_img)
             self.lblImage.setPixmap(
@@ -667,8 +680,11 @@ class PlutoGuidedAssessor(QtWidgets.QMainWindow):
             self._show_done()
             return
         # A new mechanism: select it in both data stores before anything else.
+        # enforce_order=False because the sequencer, not the protocol CSV's row
+        # order, decides what comes next here — the two orders differ on
+        # purpose, and the row-order gate would reject the very first step.
         if _step.mech != self.data.protocol.mech:
-            self.data.protocol.set_mechanism(_step.mech)
+            self.data.protocol.set_mechanism(_step.mech, enforce_order=False)
             self.data.detailedsummary.set_mechanism(_step.mech)
         _cb = self._on_calib_closed if _step.is_calib else self._on_task_closed
         try:

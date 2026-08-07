@@ -22,6 +22,11 @@ import types
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import debugconfig
+# Protocol ordering is enforced unless DEBUG is on; pin it off so these tests
+# exercise production behaviour whatever the developer has set locally.
+debugconfig.DEBUG = False
+
 import pandas as pd
 
 import plutofullassessdef as pfadef
@@ -154,7 +159,9 @@ def test_update_raises_when_no_row_matches():
     rather than disappear."""
     _dir = tempfile.mkdtemp(prefix="plutocsv_")
     _p = _protocol_data(_dir)
-    _p.set_mechanism("HOC")
+    # The first mechanism in the protocol, so selecting it is legal under the
+    # normal sequential ordering rules.
+    _p.set_mechanism(pfadef.MECHANISMS[0])
     _p._task = "PROM"          # not in the screening protocol
     try:
         _p.update(session="x", rawfile="r", summaryfile="s", taskcomment="",

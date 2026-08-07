@@ -18,6 +18,11 @@ import tempfile
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import debugconfig
+# Protocol ordering is enforced unless DEBUG is on; pin it off so these tests
+# exercise production behaviour whatever the developer has set locally.
+debugconfig.DEBUG = False
+
 _tmp = pathlib.Path(tempfile.mkdtemp(prefix="viewdone_"))
 
 import plutofullassessdef as pfadef
@@ -83,7 +88,9 @@ def test_a_half_finished_timepoint_is_not_complete():
     with QUIET:
         _d.create_session_folder()
         _d.start_protocol()
-        _d.protocol.set_mechanism("WURD")
+        # First mechanism in the protocol, so selecting it is legal under the
+        # normal sequential ordering rules.
+        _d.protocol.set_mechanism(pfadef.MECHANISMS[0])
         _d.protocol.set_task("AROM")
         _d.protocol.update(session="s", rawfile="r", summaryfile="s",
                            taskcomment="", status="Complete")

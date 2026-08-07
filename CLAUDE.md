@@ -44,13 +44,31 @@ uv run python -m py_compile <file1.py> [file2.py ...]
 
 ## Building a Standalone Executable
 
-A PyInstaller spec file (`plutofullassessment.spec`) is present. Build with:
+Two PyInstaller specs, one per GUI. They build independently and can be
+installed side by side.
 
 ```bash
-uv run pyinstaller plutofullassessment.spec
+# Guided GUI (newgui/main.py) — the current application
+uv run pyinstaller plutoguidedassessment.spec   # -> dist/plutoguidedassessment.exe
+
+# Older manually-driven GUI
+uv run pyinstaller plutofullassessment.spec     # -> dist/plutofullassessment.exe
 ```
 
-Output goes to `dist/plutofullassessment.exe`.
+`plutoguidedassessment.spec` refuses to build while `debugconfig.py` has
+`DEBUG = True`, since it is baked into the archive and invisible from the exe.
+Set `PLUTO_ALLOW_DEBUG_BUILD=1` to build a debug exe on purpose. A leftover
+`MECHANISM_ORDER` does **not** block a build — `newgui.sequencer` ignores it
+unless `DEBUG` is on.
+
+Both specs embed `.env` (S3 credentials) into the binary when it exists in the
+repo root. The keys are recoverable by unpacking the exe — use a
+least-privilege IAM key, or delete `.env` before building and drop it beside
+the exe instead, which takes priority at runtime.
+
+Only the executable is needed on the assessment machine: `config.json`, the
+data tree and the logs are created under the operator's Documents folder on
+first run.
 
 ## Architecture
 
